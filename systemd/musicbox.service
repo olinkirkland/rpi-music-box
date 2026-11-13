@@ -1,0 +1,16 @@
+# Template: install.sh fills in @USER@ and @DIR@ and copies this to
+# /etc/systemd/system/musicbox.service
+[Unit]
+Description=NFC music box
+After=sound.target local-fs.target
+
+[Service]
+User=@USER@
+SupplementaryGroups=audio i2c gpio
+WorkingDirectory=@DIR@
+ExecStart=@DIR@/.venv/bin/musicbox run
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

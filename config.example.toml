@@ -1,0 +1,22 @@
+# Copy to ~/.config/musicbox/config.toml and edit. Every key is optional;
+# the values below are the defaults.
+
+# Where the hard drive with the music is mounted.
+music_dir = "/mnt/music"
+
+# Card -> track mapping, maintained by `musicbox assign`.
+cards_file = "~/.config/musicbox/cards.json"
+
+# Playback volume, 0-100.
+volume = 100
+
+# ALSA device for mpv, e.g. "alsa/plughw:CARD=Device,DEV=0".
+# Run `mpv --audio-device=help` to list them. Empty = system default.
+audio_device = ""
+
+# How many failed reads in a row count as "card removed". Raise this if
+# playback cuts out while the card is still lying on the reader.
+misses_to_remove = 3
+
+# Seconds to wait for a card on each read.
+read_timeout = 0.2
