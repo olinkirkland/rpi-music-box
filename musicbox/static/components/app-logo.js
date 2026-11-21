@@ -10,6 +10,9 @@
 // nothing here leaks into the page and nothing in style.css is needed.
 // Colours follow the page's light/dark accent when it has one
 // (--mb-accent, --mb-text), and fall back to fixed values elsewhere.
+//
+// The browser tab icon, static/favicon.svg, is a copy of the mark drawn as
+// an image file. If you change the mark's shape or colour, update it too.
 
 const STYLE_ID = "ttp-logo-styles";
 

@@ -535,14 +535,15 @@ button.warning:hover { background: color-mix(in srgb, var(--mb-warn) 85%, #000);
   filter: blur(40px) saturate(1.2); opacity: 0.35; pointer-events: none;
 }
 :root[data-theme=dark] .pm-backdrop { opacity: 0.28; }
+/* Leave Play Mode: just an X, no circle or background; blue on hover. */
 .pm-close {
-  position: absolute; top: 1rem; right: 1rem; z-index: 2; width: 2.75rem; height: 2.75rem; margin: 0; padding: 0;
-  display: inline-flex; align-items: center; justify-content: center; border-radius: 50%;
-  background: color-mix(in srgb, var(--pico-card-background-color) 75%, transparent);
-  border: 1px solid var(--pico-muted-border-color); color: var(--mb-text); box-shadow: none;
+  position: absolute; top: 1.25rem; right: 1.25rem; z-index: 2; margin: 0; padding: 0.25rem;
+  display: inline-flex; align-items: center; justify-content: center; width: auto; height: auto;
+  background: none; border: none; border-radius: 0; box-shadow: none; outline-offset: 2px;
+  color: var(--pico-muted-color); cursor: pointer;
 }
-.pm-close svg { width: 1.25rem; height: 1.25rem; }
-.pm-close:hover { color: var(--mb-accent); border-color: var(--mb-accent); background: var(--pico-card-background-color); }
+.pm-close svg { width: 1.35rem; height: 1.35rem; }
+.pm-close:hover, .pm-close:focus-visible { color: var(--mb-accent); background: none; border: none; box-shadow: none; }
 .pm-body {
   position: relative; z-index: 1; width: min(68rem, 100%); padding: 3rem 2rem;
   display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 3rem; align-items: center;
@@ -611,11 +612,6 @@ dialog.modal.wide > article { width: min(64rem, calc(100vw - 2rem)); }
 
 /* File manager */
 .fm.dragging { box-shadow: inset 0 0 0 3px var(--mb-accent); }
-.fm-crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 0.15rem; margin: 0 0 0.2rem; }
-.fm-crumb { margin: 0; padding: 0.15rem 0.4rem; width: auto; background: none; border: none; color: var(--mb-accent); font-size: 0.9rem; font-weight: 600; box-shadow: none; }
-.fm-crumb.here { color: var(--mb-text); cursor: default; }
-.fm-crumb:hover:not(.here) { text-decoration: underline; background: none; color: var(--mb-accent); }
-.fm-sep { color: var(--pico-muted-color); }
 .fm-tools { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
 .fm-tools > button { margin: 0; width: auto; padding: 0.4rem 1rem; font-size: 0.88rem; }
 .fm-tools .spacer { flex: 1; }
@@ -655,9 +651,6 @@ button.fm-name:hover { color: var(--mb-accent); background: none; }
 /* Buttons with a leading icon */
 button.with-icon { display: inline-flex; align-items: center; justify-content: center; gap: 0.45rem; }
 button.with-icon svg { flex: none; width: 1.05rem; height: 1.05rem; }
-.fm-crumb { display: inline-flex; align-items: center; gap: 0.3rem; }
-.fm-crumb svg { width: 1rem; height: 1rem; }
-.fm-crumbs { margin-bottom: 0.6rem; }
 
 /* Tap log button: "View more" on wide screens, "Show all" on phones. */
 .label-narrow { display: none; }
@@ -671,3 +664,29 @@ button.with-icon svg { flex: none; width: 1.05rem; height: 1.05rem; }
   /* Track rows never push past the window. */
   .picker-list li, .picked-list li { min-width: 0; }
 }
+
+/* File manager path: a quiet, left-aligned "All files / folder / sub" line,
+   each part a link back to that folder; the current folder is plain text. */
+.fm-crumbs {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 0.05rem;
+  margin: 0 0 0.4rem; font-size: 0.8rem; line-height: 1.4; color: var(--pico-muted-color);
+}
+.fm-crumb {
+  display: inline-flex; align-items: center; gap: 0.25rem; width: auto; margin: 0; padding: 0.05rem 0.25rem;
+  border: none; border-radius: 4px; background: none; box-shadow: none;
+  color: var(--pico-muted-color); font-size: inherit; font-weight: 400; text-align: left;
+}
+.fm-crumb svg { width: 0.85rem; height: 0.85rem; }
+.fm-crumb:hover:not(.here), .fm-crumb:focus-visible { color: var(--mb-accent); background: var(--mb-accent-soft); }
+.fm-crumb.here { color: var(--mb-text); font-weight: 500; cursor: default; }
+.fm-sep { color: var(--pico-muted-border-color); padding: 0 0.05rem; }
+
+/* Renaming a file: the name box, with the extension fixed after it */
+.fm-rename {
+  display: flex; align-items: center; flex: 1; min-width: 0;
+  border: 1px solid var(--pico-form-element-border-color); border-radius: var(--pico-border-radius);
+  background: var(--pico-form-element-background-color);
+}
+.fm-rename input { flex: 1; min-width: 0; border: none !important; box-shadow: none !important; background: transparent !important; }
+.fm-rename:focus-within { border-color: var(--mb-accent); box-shadow: 0 0 0 2px var(--pico-primary-focus); }
+.fm-ext { flex: none; padding: 0 0.65rem 0 0.1rem; font-size: 0.88rem; color: var(--pico-muted-color); user-select: none; }

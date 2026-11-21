@@ -268,7 +268,7 @@ const app = createApp({
       volumeBusy: false,
       playMode: false,
       fm: { open: false, path: "", absolute: "", crumbs: [], folders: [], files: [], disk: null,
-            loading: false, busy: false, error: "", renaming: null, renameTo: "",
+            loading: false, busy: false, error: "", renaming: null, renameTo: "", renameExt: "",
             uploads: [], dragging: false },
       newFolder: { open: false, name: "", busy: false, error: "" },
       allTaps: { open: false, query: "", page: 1, pages: 1, total: 0, rows: [], busy: false, error: "" },
@@ -600,11 +600,15 @@ const app = createApp({
       }
     },
     startRename(item) {
+      // Files: edit the name only; the extension stays as it is.
+      const dot = item.name.lastIndexOf(".");
+      const isFile = this.fm.files.includes(item) && dot > 0;
       this.fm.renaming = item.path;
-      this.fm.renameTo = item.name;
+      this.fm.renameTo = isFile ? item.name.slice(0, dot) : item.name;
+      this.fm.renameExt = isFile ? item.name.slice(dot) : "";
     },
     doRename(item) {
-      const name = this.fm.renameTo;
+      const name = this.fm.renameTo.trim() + this.fm.renameExt;
       return this.fmAction(async () => {
         const res = await api("POST", "/api/files/rename", { path: item.path, name });
         this.fm.renaming = null;
@@ -908,6 +912,16 @@ const app = createApp({
         this.controlBusy = false;
       }
     },
+    // Escape never closes a modal. The dialogs block it, but Chrome still
+    // closes one on a repeated Escape; if a dialog closes while its window is
+    // meant to be open, open it again.
+    keepOpen(ref) {
+      const open = { filesDialog: this.fm.open, folderDialog: this.newFolder.open, tapsDialog: this.allTaps.open,
+                     editDialog: this.edit.open, assignDialog: this.assign.open }[ref];
+      const el = this.$refs[ref];
+      if (open && el && !el.open) el.showModal();
+    },
+
     // --- Play Mode ------------------------------------------------------------
     async openPlayMode() {
       this.playMode = true;
@@ -1006,9 +1020,8 @@ const app = createApp({
       }
     });
     // Leaving browser full screen (Esc, swipe) also leaves Play Mode.
-    document.addEventListener("fullscreenchange", () => {
-      if (!document.fullscreenElement && this.playMode) this.playMode = false;
-    });
+    // Escape can always leave browser full screen (pages can't stop that),
+    // but Play Mode itself stays open, filling the window; only its X closes it.
     this.connect();
     setInterval(() => (this.tick = Date.now() / 1000), 250);
   },

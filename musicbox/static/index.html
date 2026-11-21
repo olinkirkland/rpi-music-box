@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <title>Tap to Play</title>
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
 <script>
   // Pick the theme before anything draws, so there is no flash of the wrong
   // one: the choice saved on this device, else the device's own setting.
@@ -223,7 +224,7 @@
   </article>
 
   <!-- File manager -->
-  <dialog ref="filesDialog" class="modal wide" @cancel.prevent="closeFiles">
+  <dialog ref="filesDialog" class="modal wide" @cancel.prevent @keydown.esc.prevent @close="keepOpen('filesDialog')">
     <article v-if="fm.open" class="fm" :class="{ dragging: fm.dragging }"
              @dragover.prevent="fm.dragging = true" @dragleave.self="fm.dragging = false" @drop.prevent="dropFiles">
       <header class="modal-head">
@@ -244,17 +245,6 @@
           <b>Edit</b> on the card instead.
         </span>
       </p>
-      <!-- Where you are: shown inside a folder only. -->
-      <nav v-if="fm.path" class="fm-crumbs" aria-label="Folder">
-        <template v-for="(c, i) in fm.crumbs" :key="c.path">
-          <span v-if="i" class="fm-sep" aria-hidden="true">/</span>
-          <button type="button" class="fm-crumb" :class="{ here: c.path === fm.path }" @click="openFolder(c.path)"
-                  :aria-current="c.path === fm.path ? 'location' : null">
-            <template v-if="i === 0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11l8-6.5 8 6.5M6 9.5V19h12V9.5"></path></svg>All files</template>
-            <template v-else>{{ c.name }}</template>
-          </button>
-        </template>
-      </nav>
 
       <div class="fm-tools">
         <button type="button" class="with-icon" @click="$refs.fmUpload.click()" :disabled="fm.busy">
@@ -280,13 +270,18 @@
       </ul>
       <p v-if="fm.error" class="field-error">{{ fm.error }}</p>
 
-      <div class="fm-list" role="list">
-        <div v-if="fm.path" class="fm-row up" role="listitem">
-          <button type="button" class="fm-name" @click="openFolder(fm.crumbs[fm.crumbs.length - 2].path)">
-            <svg class="fm-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg>
-            Back
+      <!-- Where you are, right above what's in it (inside a folder only). -->
+      <nav v-if="fm.path" class="fm-crumbs" aria-label="Folder">
+        <template v-for="(c, i) in fm.crumbs" :key="c.path">
+          <span v-if="i" class="fm-sep" aria-hidden="true">/</span>
+          <button type="button" class="fm-crumb" :class="{ here: c.path === fm.path }" @click="openFolder(c.path)"
+                  :aria-current="c.path === fm.path ? 'location' : null">
+            <template v-if="i === 0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11l8-6.5 8 6.5M6 9.5V19h12V9.5"></path></svg>All files</template>
+            <template v-else>{{ c.name }}</template>
           </button>
-        </div>
+        </template>
+      </nav>
+      <div class="fm-list" role="list">
         <div v-for="f in fm.folders" :key="'d' + f.path" class="fm-row" role="listitem">
           <template v-if="fm.renaming === f.path">
             <form class="fm-inline grow" @submit.prevent="doRename(f)">
@@ -316,7 +311,10 @@
         <div v-for="f in fm.files" :key="'f' + f.path" class="fm-row" role="listitem">
           <template v-if="fm.renaming === f.path">
             <form class="fm-inline grow" @submit.prevent="doRename(f)">
-              <input v-model="fm.renameTo" aria-label="New name" maxlength="200" required>
+              <span class="fm-rename">
+                <input v-model="fm.renameTo" aria-label="New name, without the extension" maxlength="200" required>
+                <span v-if="fm.renameExt" class="fm-ext" title="The extension stays the same">{{ fm.renameExt }}</span>
+              </span>
               <button type="submit" :disabled="fm.busy">Rename</button>
               <button type="button" class="secondary" @click="fm.renaming = null">Cancel</button>
             </form>
@@ -350,7 +348,7 @@
   </dialog>
 
   <!-- New folder -->
-  <dialog ref="folderDialog" class="modal" @cancel.prevent="closeNewFolder">
+  <dialog ref="folderDialog" class="modal" @cancel.prevent @keydown.esc.prevent @close="keepOpen('folderDialog')">
     <article v-if="newFolder.open">
       <header class="modal-head">
         <h3>New folder</h3>
@@ -375,7 +373,7 @@
   </dialog>
 
   <!-- All taps -->
-  <dialog ref="tapsDialog" class="modal wide" @cancel.prevent="closeAllTaps" @click.self="closeAllTaps">
+  <dialog ref="tapsDialog" class="modal wide" @cancel.prevent @keydown.esc.prevent @close="keepOpen('tapsDialog')" @click.self="closeAllTaps">
     <article v-if="allTaps.open">
       <header class="modal-head">
         <h3>All card taps</h3>
@@ -427,7 +425,7 @@
   </dialog>
 
   <!-- Edit card -->
-  <dialog ref="editDialog" class="modal" @cancel.prevent="closeEdit" @click.self="closeEdit">
+  <dialog ref="editDialog" class="modal" @cancel.prevent @keydown.esc.prevent @close="keepOpen('editDialog')" @click.self="closeEdit">
     <article v-if="edit.open">
       <header class="modal-head">
         <h3>Edit card</h3>
@@ -516,7 +514,7 @@
   </dialog>
 
   <!-- Assign new card -->
-  <dialog ref="assignDialog" class="modal" @cancel.prevent="closeAssign">
+  <dialog ref="assignDialog" class="modal" @cancel.prevent @keydown.esc.prevent @close="keepOpen('assignDialog')">
     <article v-if="assign.open">
       <header class="modal-head">
         <h3>Assign new card</h3>
@@ -568,9 +566,9 @@
 
   <!-- Play Mode: full screen Now Playing -->
   <div v-if="playMode" ref="playModeEl" class="play-mode" role="dialog" aria-modal="true" aria-label="Play Mode"
-       @keydown.esc="closePlayMode" tabindex="-1">
+       tabindex="-1">
     <div v-if="coverUrl" class="pm-backdrop" :style="{ backgroundImage: 'url(' + coverUrl + ')' }" aria-hidden="true"></div>
-    <button type="button" class="pm-close" @click="closePlayMode" aria-label="Leave Play Mode" title="Leave Play Mode (Esc)">
+    <button type="button" class="pm-close" @click="closePlayMode" aria-label="Leave Play Mode" title="Leave Play Mode">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg>
     </button>
     <div class="pm-body">

@@ -146,6 +146,8 @@ def make_handler(taplog, cards, events=None, controller=None, cover_dir=None,
             path = url.path
             if path == "/":
                 self._static("index.html")
+            elif path == "/favicon.ico":  # asked for by some browsers whatever the page says
+                self._static("favicon.svg")
             elif path.startswith("/static/"):
                 self._static(unquote(path[len("/static/"):]))
             elif path == "/api/events":

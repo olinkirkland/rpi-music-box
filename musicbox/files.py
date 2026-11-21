@@ -169,13 +169,19 @@ class FileManager:
         return {"path": self.rel(target), "replaced": existed}
 
     def rename(self, rel: str, new_name: str) -> dict:
-        """Rename within the same folder; cards follow."""
+        """Rename within the same folder; cards follow.
+
+        A file always keeps its extension: `new_name` may include it or not
+        ("Song" and "Song.mp3" both give "Song.mp3"); anything else typed
+        after a dot is part of the name ("Song.wav" gives "Song.wav.mp3").
+        """
         path = self.resolve(rel)
         if path == self.root.resolve():
             raise FileError("the music folder itself can't be renamed")
         new_name = clean_filename(new_name)
-        if path.is_file() and Path(new_name).suffix.lower() != path.suffix.lower():
-            raise FileError(f"keep the {path.suffix or 'same'} ending, so the file still plays")
+        if path.is_file() and path.suffix:
+            base = new_name[: -len(path.suffix)] if new_name.lower().endswith(path.suffix.lower()) else new_name
+            new_name = clean_filename(base) + path.suffix
         target = path.parent / new_name
         if target.exists() and target.resolve() != path.resolve():
             raise FileError("something with that name is already there", 409)

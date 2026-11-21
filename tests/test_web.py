@@ -133,6 +133,13 @@ def test_static_assets_served_and_contained(server):
         assert e.value.code == 404, bad
 
 
+def test_tab_icon(server):
+    _, base = server
+    for path in ("/static/favicon.svg", "/favicon.ico"):
+        with urlopen(base + path) as r:
+            assert r.headers["Content-Type"] == "image/svg+xml" and b"<svg" in r.read()
+
+
 def test_now_endpoint_defaults_to_idle(server):
     _, base = server
     code, data = call(base, "GET", "/api/now")

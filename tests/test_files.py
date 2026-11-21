@@ -94,8 +94,14 @@ def test_rename_file_and_folder_update_cards(fm):
     manager, cards, tmp = fm
     assert manager.rename("song.mp3", "Song.mp3") == {"path": "Song.mp3", "cards": ["bb22"]}
     assert cards.entries()["bb22"]["tracks"] == ["Song.mp3"]
+    # The extension never changes: typed or not, it's kept.
+    assert manager.rename("Song.mp3", "Tune")["path"] == "Tune.mp3"
+    assert manager.rename("Tune.mp3", "Song.MP3")["path"] == "Song.mp3"
+    assert manager.rename("Song.mp3", "Song.wav")["path"] == "Song.wav.mp3"
+    assert cards.entries()["bb22"]["tracks"] == ["Song.wav.mp3"]
     with pytest.raises(FileError):
-        manager.rename("Song.mp3", "Song.wav")  # the ending must stay
+        manager.rename("Song.wav.mp3", ".mp3")  # no name left
+    manager.rename("Song.wav.mp3", "Song")
     assert manager.rename("Story", "Snow White")["cards"] == ["aa11"]
     assert cards.entries()["aa11"]["tracks"] == ["Snow White/1.mp3", "Snow White/2.mp3"]
     with pytest.raises(FileError) as e:
