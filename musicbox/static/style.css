@@ -509,7 +509,6 @@ button.warning:hover { background: color-mix(in srgb, var(--mb-warn) 85%, #000);
 .picker { display: grid; grid-template-areas: "picked" "available"; gap: 0.6rem; }
 .picker .picked { grid-area: picked; margin-bottom: 0; }
 .picker .available { grid-area: available; min-width: 0; }
-.available-head { margin-bottom: 0.4rem; }
 .picked-empty { margin: 0.4rem 0 0; font-size: 0.8rem; color: var(--pico-muted-color); }
 @media (min-width: 960px) {
   /* New / Edit card: wide, so available and selected tracks sit side by side comfortably. */
@@ -604,17 +603,18 @@ dialog.modal .modal-head { display: flex; align-items: center; justify-content: 
 dialog.modal.wide > article { width: min(64rem, calc(100vw - 2rem)); }
 
 /* Music files panel */
-.files-body { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; padding: 0.9rem 1rem; }
-.files-where { display: flex; flex-direction: column; gap: 0.45rem; min-width: 0; flex: 1 1 24rem; }
+.files-body { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.9rem 1rem; }
+.files-body p { margin: 0; font-size: 0.9rem; color: var(--pico-muted-color); }
+@media (max-width: 600px) { .files-body { flex-direction: column; align-items: stretch; } .files-open { width: 100%; } }
 .files-advanced {
-  display: flex; gap: 0.6rem; align-items: flex-start; margin: 0; padding: 0.6rem 0.75rem; border-radius: 8px;
+  display: flex; gap: 0.6rem; align-items: flex-start; margin: 0 0 0.85rem; padding: 0.6rem 0.75rem; border-radius: 8px;
   font-size: 0.82rem; line-height: 1.45; color: var(--mb-text);
   background: color-mix(in srgb, var(--mb-warn) 12%, transparent);
   border: 1px solid color-mix(in srgb, var(--mb-warn) 40%, transparent);
 }
 .files-advanced svg { flex: none; width: 1.1rem; height: 1.1rem; margin-top: 0.1rem; color: var(--mb-warn); }
 .files-advanced b { font-weight: 600; }
-.files-open { margin: 0; width: auto; padding: 0.45rem 1.2rem; }
+.files-open { margin: 0; width: auto; padding: 0.35rem 1rem; font-size: 0.85rem; }
 .copy-id.path { font-size: 0.85rem; max-width: 100%; margin-left: -0.4rem; }
 
 /* File manager */

@@ -126,7 +126,6 @@ const TrackPicker = {
         </ol>
       </div>
       <div class="available">
-      <p class="picked-head available-head"><b>Available tracks</b><span>tap to add or remove</span></p>
       <input type="search" v-model="query" placeholder="Search tracks" aria-label="Search tracks">
       <ul class="picker-list" role="listbox" aria-multiselectable="true" aria-label="Available tracks">
         <li v-for="item in filtered" :key="item.path" role="option" tabindex="0"
@@ -267,7 +266,6 @@ const app = createApp({
       volume: { level: null, steps: [], available: false },
       volumeBusy: false,
       playMode: false,
-      paths: {},
       fm: { open: false, path: "", absolute: "", crumbs: [], folders: [], files: [], disk: null,
             loading: false, busy: false, error: "", newFolder: null, renaming: null, renameTo: "",
             uploads: [], dragging: false },
@@ -531,13 +529,6 @@ const app = createApp({
     },
     usedByTitle(uids) {
       return uids.map((u) => this.cardName(u) || u).join(", ");
-    },
-    async loadPaths() {
-      try {
-        this.paths = await api("GET", "/api/paths");
-      } catch {
-        this.paths = {};
-      }
     },
     openFiles(path) {
       this.fm = { ...this.fm, open: true, error: "", uploads: [], newFolder: null, renaming: null, dragging: false };
@@ -961,7 +952,6 @@ const app = createApp({
         // Catch up on anything missed while disconnected.
         this.loadCards();
         this.loadTaps();
-        this.loadPaths();
         this.renewAssigning();
       };
       source.onerror = () => {

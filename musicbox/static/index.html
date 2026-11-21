@@ -177,30 +177,10 @@
     </div>
   </article>
 
-  <!-- Music files -->
+  <!-- Manage files -->
   <article class="files-panel">
-    <header class="panel-head">
-      <h2>Music files</h2>
-      <small>{{ libraryCount }}</small>
-    </header>
     <div class="files-body">
-      <div class="files-where">
-        <p class="files-advanced">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M12 3.5L2.5 20h19z"></path><path d="M12 10v4.5M12 17.5v.01"></path>
-          </svg>
-          <span>
-            <b>Advanced file management.</b>
-            Upload, rename and delete the files in the music folder on the Pi directly.
-            Changes take effect right away, deleted files can't be recovered, and renaming or
-            deleting changes every card that uses those files. To change what a card plays, use
-            <b>Edit</b> on the card instead.
-          </span>
-        </p>
-        <button v-if="paths.music_dir" type="button" class="copy-id path" @click="copy(paths.music_dir)" :title="'Copy ' + paths.music_dir">
-          <code>{{ paths.music_dir }}</code><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15V5a2 2 0 0 1 2-2h8"></path></svg>
-        </button>
-      </div>
+      <p>Upload new tracks, and organize, rename or delete the files in your music library.</p>
       <button type="button" class="secondary outline files-open" @click="openFiles('')">Manage files</button>
     </div>
   </article>
@@ -243,11 +223,23 @@
     <article v-if="fm.open" class="fm" :class="{ dragging: fm.dragging }"
              @dragover.prevent="fm.dragging = true" @dragleave.self="fm.dragging = false" @drop.prevent="dropFiles">
       <header class="modal-head">
-        <h3>Music files</h3>
+        <h3>Manage files</h3>
         <button type="button" class="icon-btn modal-x" @click="closeFiles" aria-label="Close" title="Close">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg>
         </button>
       </header>
+      <p class="files-advanced">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M12 3.5L2.5 20h19z"></path><path d="M12 10v4.5M12 17.5v.01"></path>
+        </svg>
+        <span>
+          <b>Advanced file management.</b>
+          Upload, rename and delete the files in the music folder on the Pi directly.
+          Changes take effect right away, deleted files can't be recovered, and renaming or
+          deleting changes every card that uses those files. To change what a card plays, use
+          <b>Edit</b> on the card instead.
+        </span>
+      </p>
       <nav class="fm-crumbs" aria-label="Folder">
         <template v-for="(c, i) in fm.crumbs" :key="c.path">
           <span v-if="i" class="fm-sep" aria-hidden="true">/</span>
@@ -504,7 +496,7 @@
         </button>
       </header>
 
-      <p class="modal-label">1. Tap a card on the box</p>
+      <p class="modal-label">Tap a card on the box</p>
       <div class="tap-zone" :class="{ got: assign.uid, warn: assignExisting }">
         <template v-if="!assign.uid">
           <span class="tap-pulse" aria-hidden="true"></span>
@@ -526,7 +518,7 @@
         </template>
       </div>
 
-      <p class="modal-label">2. Pick the tracks it plays</p>
+      <p class="modal-label">Pick the tracks it plays</p>
       <track-picker :items="libraryItems" v-model="assign.tracks"></track-picker>
 
       <p v-if="assignSame" class="field-hint">This card already plays exactly these tracks.</p>
