@@ -131,6 +131,16 @@ Watch what it is doing (card taps, unknown cards, errors):
 journalctl -u musicbox -f
 ```
 
+## Web page
+
+While the service runs, open `http://<pi-address>:8080/` from any device on
+the same network (find the address with `hostname -I`). It shows every card
+tap, newest first, with the card ID, its track and whether it played, and
+refreshes itself every few seconds. The page is read-only and has no password.
+
+Taps are stored in `~/.local/share/musicbox/taps.db` (SQLite). Change the port
+or turn the page off with `web_port` / `web_enabled` in the config.
+
 ## Configuration
 
 Optional. Copy `config.example.toml` to `~/.config/musicbox/config.toml` and

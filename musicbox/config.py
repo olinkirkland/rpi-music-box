@@ -18,10 +18,14 @@ class Config:
     audio_device: str = ""
     misses_to_remove: int = 3
     read_timeout: float = 0.2
+    taps_file: Path = Path("~/.local/share/musicbox/taps.db")
+    web_enabled: bool = True
+    web_port: int = 8080
 
     def __post_init__(self) -> None:
         self.music_dir = Path(self.music_dir).expanduser()
         self.cards_file = Path(self.cards_file).expanduser()
+        self.taps_file = Path(self.taps_file).expanduser()
 
 
 def load_config(path: str | os.PathLike | None = None) -> Config:

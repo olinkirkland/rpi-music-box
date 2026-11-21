@@ -12,17 +12,27 @@ from .cards import CardStore
 from .config import load_config
 from .player import Player
 from .reader import Reader
+from .taplog import TapLog
+from .web import start_web
 
 
 def cmd_run(args, config, cards) -> int:
     # systemd stops us with SIGTERM; turn it into a normal exit so the
     # `finally` in MusicBox.run() silences the player.
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
+    taplog = TapLog(config.taps_file)
+    if config.web_enabled:
+        try:
+            start_web(taplog, port=config.web_port)
+        except OSError as e:
+            # Never let the web page keep the music from working.
+            logging.error("web page disabled: cannot listen on port %d (%s)", config.web_port, e)
     box = MusicBox(
         reader=Reader(timeout=config.read_timeout),
         player=Player(volume=config.volume, audio_device=config.audio_device),
         cards=cards,
         misses_to_remove=config.misses_to_remove,
+        taplog=taplog,
     )
     logging.info("music box ready: %d cards, music in %s", len(cards.all()), config.music_dir)
     box.run()

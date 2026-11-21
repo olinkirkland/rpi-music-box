@@ -20,3 +20,10 @@ misses_to_remove = 3
 
 # Seconds to wait for a card on each read.
 read_timeout = 0.2
+
+# Log of card taps, shown on the web page.
+taps_file = "~/.local/share/musicbox/taps.db"
+
+# Web page showing the tap log, at http://<pi-address>:<web_port>/
+web_enabled = true
+web_port = 8080
