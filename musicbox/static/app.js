@@ -247,17 +247,21 @@ const CardOptions = {
       ];
     },
   },
-  // Each option is a card you click as a whole; the checkbox shows its state.
+  // One row per option, separated by a faint rule: checkbox, bold name, and
+  // the description below the name.
   template: `
     <div class="card-options">
-      <label v-for="o in options" :key="o.key" class="option-card" :class="{ on: o.on, disabled: o.disabled }">
-        <span class="oc-head">
+      <template v-for="(o, i) in options" :key="o.key">
+        <hr v-if="i > 0">
+        <label class="option-row" :class="{ disabled: o.disabled }">
           <input type="checkbox" :checked="o.on" :disabled="o.disabled"
                  @change="$emit('update:' + o.key, $event.target.checked)">
-          <strong>{{ o.name }}</strong>
-        </span>
-        <span class="oc-text">{{ o.text }}</span>
-      </label>
+          <span class="or-text">
+            <strong>{{ o.name }}</strong>
+            <span class="or-desc">{{ o.text }}</span>
+          </span>
+        </label>
+      </template>
     </div>`,
 };
 
