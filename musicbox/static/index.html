@@ -1,0 +1,757 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Tap to Play</title>
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<script>
+  // Pick the theme before anything draws, so there is no flash of the wrong
+  // one: the choice saved on this device, else the device's own setting.
+  (function () {
+    var t = null;
+    try { t = localStorage.getItem("musicbox-theme"); } catch (e) {}
+    if (t !== "light" && t !== "dark") {
+      t = window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    }
+    document.documentElement.setAttribute("data-theme", t);
+  })();
+</script>
+<link rel="stylesheet" href="/static/vendor/pico-2.0.6.min.css">
+<link rel="stylesheet" href="/static/style.css">
+<script type="module" src="/static/app.js"></script>
+</head>
+<body>
+<main class="container" id="app" v-cloak>
+  <header class="page-head">
+    <div>
+      <h1><app-logo></app-logo></h1>
+    </div>
+    <div class="head-tools">
+      <span class="live" :class="connection" :title="connectionLabel">
+        <span class="dot" aria-hidden="true"></span>{{ connectionLabel }}
+      </span>
+      <button type="button" class="theme-toggle" @click="openPlayMode"
+              aria-label="Play Mode (full screen)" title="Play Mode (full screen)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"></path>
+        </svg>
+      </button>
+      <button type="button" class="theme-toggle" @click="openSettings" aria-label="Settings" title="Settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="3"></circle>
+          <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"></path>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- Currently playing -->
+  <article class="now" :class="'now-' + now.state" aria-live="polite">
+    <div class="now-label">
+      <span class="pill" :class="now.state">{{ nowLabel }}</span>
+      <code v-if="now.uid" class="uid">{{ now.uid }}</code>
+    </div>
+
+    <template v-if="now.state === 'idle'">
+      <h2 class="now-title muted-title">Nothing playing</h2>
+      <p class="now-hint">Place a card on the reader to play its tracks.</p>
+    </template>
+
+    <template v-else-if="now.state === 'playing' || now.state === 'paused' || now.state === 'finished'">
+      <div class="now-body">
+        <img v-if="coverUrl" :src="coverUrl" :key="coverUrl" class="cover" alt=""
+             @error="coverFailed = now.cover">
+        <div class="now-main">
+          <h2 class="now-title">{{ now.name }}</h2>
+          <p v-if="now.artist || now.parts > 1 || now.resumed_at" class="now-meta">
+            <span v-if="now.artist">{{ now.artist }}</span>
+            <span v-if="now.artist && now.parts > 1" aria-hidden="true"> &middot; </span>
+            <span v-if="now.parts > 1">Track {{ now.track_no || now.part + 1 }} of {{ now.parts }}: {{ now.part_title }}</span>
+            <span v-if="now.resumed_at" class="resumed"><span v-if="now.artist || now.parts > 1"> &middot; </span>Resumed at {{ clock(now.resumed_at) }}</span>
+          </p>
+          <playback-controls v-if="now.state !== 'finished'" :now="now" :position="shownPosition"
+                             :in-chime="inChime" :disabled="!canControl" :hint="controlHint"
+                             @toggle-pause="togglePause" @previous="control('previous')" @next="control('next')"
+                             @shuffle="setMode('shuffle', $event)" @repeat="setMode('repeat', $event)"
+                             @draft="seekDraft = $event" @seek="commitSeek"></playback-controls>
+          <p v-if="now.state === 'finished'" class="now-hint">Finished. Lift the card and put it back to hear it again.</p>
+        </div>
+      </div>
+    </template>
+
+    <template v-else-if="now.state === 'waiting'">
+      <h2 class="now-title muted-title">{{ cardName(now.uid) || "Card on the reader" }}</h2>
+      <p class="now-hint">This card was already there when the box started. Lift it and put it back to play.</p>
+    </template>
+
+    <template v-else-if="now.state === 'unknown'">
+      <h2 class="now-title muted-title">Unknown card</h2>
+      <p class="now-hint">No tracks are assigned to this card yet.</p>
+      <button type="button" class="outline" @click="openAssign(now.uid)">Assign this card</button>
+    </template>
+
+    <template v-else-if="now.state === 'assigning'">
+      <h2 class="now-title muted-title">Card read for assigning</h2>
+      <p class="now-hint">Cards don't play while the Assign window is open.</p>
+    </template>
+
+    <template v-else-if="now.state === 'missing'">
+      <h2 class="now-title">{{ now.name }}</h2>
+      <p class="now-hint bad">This card's files are missing from the music folder.</p>
+    </template>
+
+    <template v-else-if="now.state === 'blocked'">
+      <h2 class="now-title">{{ now.name }}</h2>
+      <p class="now-hint bad">Not played: the speaker volume couldn't be confirmed at a safe level. Check the speaker is plugged in.</p>
+    </template>
+
+    <volume-bar :volume="volume" :busy="volumeBusy" @set="setVolume"></volume-bar>
+  </article>
+
+  <!-- Cards -->
+  <article class="cards-panel">
+    <header class="panel-head">
+      <h2>Cards</h2>
+      <small>{{ cards.length }} {{ cards.length === 1 ? "card" : "cards" }} &middot; {{ libraryCount }}</small>
+    </header>
+    <div class="cards-body">
+      <input v-if="cards.length" type="search" v-model="cardQuery" class="card-search"
+             placeholder="Search by name or card ID" aria-label="Search cards by name or card ID">
+      <div class="card-grid">
+        <div v-for="c in filteredCards" :key="c.uid" class="music-card"
+             :class="{ playing: c.uid === now.uid && (now.state === 'playing' || now.state === 'paused') }">
+          <div class="mc-art">
+            <img v-if="!noCover[artKey(c)]" :src="cardArtUrl(c)" alt="" loading="lazy"
+                 @error="noCover[artKey(c)] = true">
+            <div v-else class="mc-art-empty" aria-hidden="true">
+              <svg v-if="c.kind === 'list'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+                <path d="M4 6h11M4 12h11M4 18h7"></path><circle cx="18.5" cy="17" r="2.5"></circle><path d="M21 17V9"></path>
+              </svg>
+              <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M9 18V5l11-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="17" cy="16" r="3"></circle>
+              </svg>
+            </div>
+            <span v-if="c.uid === now.uid && now.state === 'playing'" class="mc-badge">Playing</span>
+          </div>
+          <div class="mc-body">
+            <h3 class="mc-name" :title="c.name">{{ c.name }}</h3>
+            <div class="mc-tags">
+              <span v-if="c.missing" class="chip bad">File missing</span>
+              <span v-if="c.kind === 'list'" class="chip">{{ c.parts }} tracks</span>
+              <span v-if="c.shuffle" class="chip on" title="Shuffle is on">Shuffle</span>
+              <span v-if="c.repeat" class="chip on" title="Repeat is on">Repeat</span>
+              <span v-if="c.remember_playback" class="chip on" title="Carries on where it left off">Resumes</span>
+              <span v-if="c.missing_count && !c.missing" class="chip bad">{{ c.missing_count }} missing</span>
+              <span v-if="c.artist" class="chip" :title="c.artist">{{ c.artist }}</span>
+              <span v-if="!c.missing && c.kind !== 'list' && !c.artist" class="chip">Track</span>
+            </div>
+            <button type="button" class="copy-id" @click="copy(c.uid)" :title="'Copy card ID ' + c.uid"
+                    :aria-label="'Copy card ID ' + c.uid">
+              <code>{{ c.uid }}</code>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15V5a2 2 0 0 1 2-2h8"></path>
+              </svg>
+            </button>
+            <button type="button" class="secondary outline mc-edit" @click="openEdit(c)">Edit</button>
+          </div>
+        </div>
+      </div>
+      <p v-if="!cards.length" class="empty">No cards assigned yet.</p>
+      <p v-else-if="!filteredCards.length" class="empty">No cards match &ldquo;{{ cardQuery }}&rdquo;.</p>
+
+      <div class="assign-cta">
+        <button type="button" class="cta" @click="openAssign()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
+            <path d="M12 5v14M5 12h14"></path>
+          </svg>
+          Assign new card
+        </button>
+        <small>Opens a window that waits for you to tap a card on the box, then lets you pick the tracks it plays.</small>
+      </div>
+    </div>
+  </article>
+
+  <!-- Manage files -->
+  <article class="files-panel">
+    <div class="files-body">
+      <p>Upload new tracks, and organize, rename or delete files.</p>
+      <button type="button" class="secondary outline files-open with-icon" @click="openFiles('')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h4l2 2h9A1.5 1.5 0 0 1 21 9.5v8a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5z"></path></svg>Manage files
+      </button>
+    </div>
+  </article>
+
+  <!-- Tap log -->
+  <article class="taps-panel">
+    <header class="panel-head">
+      <h2>Card taps</h2>
+      <small>Latest {{ taps.length }}</small>
+    </header>
+    <div class="table-wrap scroll">
+      <table>
+        <thead><tr><th>Date</th><th>Card ID</th><th>Track</th><th>Result</th></tr></thead>
+        <tbody>
+          <tr v-for="t in taps" :key="t.id" :class="{ fresh: t.id === freshTap }">
+            <td class="nowrap">{{ dateTime(t.time) }}</td>
+            <td>
+              <button type="button" class="copy-id" @click="copy(t.uid)" :title="'Copy card ID ' + t.uid"
+                      :aria-label="'Copy card ID ' + t.uid">
+                <code>{{ t.uid }}</code>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15V5a2 2 0 0 1 2-2h8"></path>
+                </svg>
+              </button>
+            </td>
+            <td class="track" :title="t.track || ''">{{ t.track ? trackName(t.track) : "—" }}</td>
+            <td><span class="tag" :class="t.result">{{ resultLabel(t.result) }}</span></td>
+          </tr>
+        </tbody>
+      </table>
+      <p v-if="!taps.length" class="empty">No cards tapped yet.</p>
+    </div>
+    <footer v-if="taps.length" class="taps-more">
+      <button type="button" class="secondary outline" @click="openAllTaps">
+        <span class="label-wide">View more</span><span class="label-narrow">Show all</span>
+      </button>
+    </footer>
+  </article>
+
+  <!-- File manager -->
+  <dialog ref="filesDialog" class="modal wide" @cancel.prevent @keydown.esc.prevent @close="keepOpen('filesDialog')">
+    <article v-if="fm.open" ref="fmArticle" class="fm"
+             @dragenter.prevent="dragEnter" @dragover.prevent="dragOver" @dragleave="dragLeave" @drop.prevent="dropFiles">
+      <!-- Drag files in: covers the visible part of the window. -->
+      <div v-if="fm.dragging" class="fm-drop" :style="{ top: fm.dropTop + 'px', height: fm.dropHeight + 'px' }"
+           aria-hidden="true">
+        <div class="fm-drop-inner">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 15V4M7.5 8.5L12 4l4.5 4.5"></path><path d="M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15"></path>
+          </svg>
+          <b>Drop to upload</b>
+          <span>into {{ fm.path ? fm.crumbs[fm.crumbs.length - 1].name : "All files" }} &middot; audio files and cover images</span>
+        </div>
+      </div>
+      <header class="modal-head">
+        <h3>Manage files</h3>
+        <button type="button" class="icon-btn modal-x" @click="closeFiles" aria-label="Close" title="Close">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+        </button>
+      </header>
+      <p class="files-advanced">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M12 3.5L2.5 20h19z"></path><path d="M12 10v4.5M12 17.5v.01"></path>
+        </svg>
+        <span>
+          <strong>Advanced:</strong>
+          Upload, rename and delete the files in the music folder on the Pi directly.
+          Changes take effect right away, deleted files can't be recovered, and renaming or
+          deleting changes every card that uses those files. To change what a card plays, use
+          <b>Edit</b> on the card instead.
+        </span>
+      </p>
+
+      <div class="fm-tools">
+        <button type="button" class="with-icon" @click="$refs.fmUpload.click()" :disabled="fm.busy">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V4M7.5 8.5L12 4l4.5 4.5"></path><path d="M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15"></path></svg>Upload files
+        </button>
+        <input ref="fmUpload" type="file" multiple hidden
+               accept="audio/*,.mp3,.m4a,.aac,.flac,.ogg,.oga,.opus,.wav,image/jpeg,image/png,image/webp"
+               @change="pickUploads">
+        <button type="button" class="secondary outline with-icon" @click="openNewFolder" :disabled="fm.busy">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h4l2 2h9A1.5 1.5 0 0 1 21 9.5v8a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5z"></path><path d="M12 11v5M9.5 13.5h5"></path></svg>New folder
+        </button>
+        <span class="spacer"></span>
+        <small class="field-hint" v-if="fm.disk">{{ bytes(fm.disk.free) }} free</small>
+      </div>
+      <p class="field-hint fm-drop-hint">You can also drag files from your computer into this window.</p>
+
+      <ul v-if="fm.uploads.length" class="fm-uploads">
+        <li v-for="u in fm.uploads" :key="u.id" :class="u.state">
+          <span class="fm-up-name">{{ u.name }}</span>
+          <progress v-if="u.state === 'uploading'" :value="u.done" :max="u.size"></progress>
+          <span class="fm-up-state">{{ uploadLabel(u) }}</span>
+        </li>
+      </ul>
+      <p v-if="fm.error" class="field-error">{{ fm.error }}</p>
+
+      <!-- Where you are, right above what's in it (inside a folder only). -->
+      <nav v-if="fm.path" class="fm-crumbs" aria-label="Folder">
+        <template v-for="(c, i) in fm.crumbs" :key="c.path">
+          <span v-if="i" class="fm-sep" aria-hidden="true">/</span>
+          <button type="button" class="fm-crumb" :class="{ here: c.path === fm.path }" @click="openFolder(c.path)"
+                  :aria-current="c.path === fm.path ? 'location' : null">
+            <template v-if="i === 0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11l8-6.5 8 6.5M6 9.5V19h12V9.5"></path></svg>All files</template>
+            <template v-else>{{ c.name }}</template>
+          </button>
+        </template>
+      </nav>
+      <div class="fm-list" role="list">
+        <div v-for="f in fm.folders" :key="'d' + f.path" class="fm-row" role="listitem">
+          <template v-if="fm.renaming === f.path">
+            <form class="fm-inline grow" @submit.prevent="doRename(f)">
+              <input v-model="fm.renameTo" aria-label="New name" maxlength="200" required>
+              <button type="submit" :disabled="fm.busy">Rename</button>
+              <button type="button" class="secondary" @click="fm.renaming = null">Cancel</button>
+            </form>
+          </template>
+          <template v-else>
+            <button type="button" class="fm-name" @click="openFolder(f.path)">
+              <svg class="fm-icon folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h4l2 2h9A1.5 1.5 0 0 1 21 9.5v8a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5z"></path></svg>
+              <span class="fm-text">{{ f.name }}</span>
+            </button>
+            <span class="fm-meta">{{ f.items }} {{ f.items === 1 ? "item" : "items" }}</span>
+            <span v-if="f.used_by.length" class="chip on" :title="usedByTitle(f.used_by)">{{ usedBy(f.used_by) }}</span>
+            <span class="fm-actions">
+              <button type="button" class="icon-btn" @click="startRename(f)" :aria-label="'Rename ' + f.name" title="Rename">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"></path></svg>
+              </button>
+              <button type="button" class="icon-btn danger-icon" @click="deleteItem(f, 'folder')" :aria-label="'Delete ' + f.name"
+                      :title="f.items ? 'Only empty folders can be deleted' : 'Delete'" :disabled="f.items > 0">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"></path></svg>
+              </button>
+            </span>
+          </template>
+        </div>
+        <div v-for="f in fm.files" :key="'f' + f.path" class="fm-row" role="listitem">
+          <template v-if="fm.renaming === f.path">
+            <form class="fm-inline grow" @submit.prevent="doRename(f)">
+              <span class="fm-rename">
+                <input v-model="fm.renameTo" aria-label="New name, without the extension" maxlength="200" required>
+                <span v-if="fm.renameExt" class="fm-ext" title="The extension stays the same">{{ fm.renameExt }}</span>
+              </span>
+              <button type="submit" :disabled="fm.busy">Rename</button>
+              <button type="button" class="secondary" @click="fm.renaming = null">Cancel</button>
+            </form>
+          </template>
+          <template v-else>
+            <span class="fm-name static">
+              <svg v-if="f.kind === 'audio'" class="fm-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l11-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="17" cy="16" r="3"></circle></svg>
+              <svg v-else-if="f.kind === 'image'" class="fm-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"></rect><circle cx="9" cy="9" r="2"></circle><path d="M21 15l-5-5L5 21"></path></svg>
+              <svg v-else class="fm-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h8l4 4v14H6z"></path></svg>
+              <span class="fm-text" :title="f.name">{{ f.name }}</span>
+            </span>
+            <span class="fm-meta">{{ bytes(f.size) }}</span>
+            <span v-if="f.used_by.length" class="chip on" :title="usedByTitle(f.used_by)">{{ usedBy(f.used_by) }}</span>
+            <span class="fm-actions">
+              <button type="button" class="icon-btn" @click="startRename(f)" :aria-label="'Rename ' + f.name" title="Rename">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"></path></svg>
+              </button>
+              <button type="button" class="icon-btn danger-icon" @click="deleteItem(f, 'file')" :aria-label="'Delete ' + f.name" title="Delete">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"></path></svg>
+              </button>
+            </span>
+          </template>
+        </div>
+        <p v-if="!fm.loading && !fm.folders.length && !fm.files.length" class="empty">This folder is empty.</p>
+        <p v-if="fm.loading" class="empty">Loading&hellip;</p>
+      </div>
+      <footer class="modal-actions fm-foot">
+        <small class="field-hint">Renaming a file or folder updates every card that uses it. Files you delete are taken out of cards' track lists.</small>
+      </footer>
+    </article>
+  </dialog>
+
+  <!-- New folder -->
+  <dialog ref="folderDialog" class="modal" @cancel.prevent @keydown.esc.prevent @close="keepOpen('folderDialog')">
+    <article v-if="newFolder.open">
+      <header class="modal-head">
+        <h3>New folder</h3>
+        <button type="button" class="icon-btn modal-x" @click="closeNewFolder" aria-label="Close" title="Close"
+                :disabled="newFolder.busy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
+      </header>
+      <form id="new-folder-form" @submit.prevent="makeFolder">
+        <label>
+          Folder name
+          <input ref="newFolderInput" v-model="newFolder.name" class="name-input" maxlength="200"
+                 autocomplete="off" required :aria-invalid="newFolder.error ? 'true' : null">
+          <small class="field-hint">Created in <b>{{ fm.path ? fm.crumbs[fm.crumbs.length - 1].name : "All files" }}</b>.</small>
+        </label>
+        <p v-if="newFolder.error" class="field-error">{{ newFolder.error }}</p>
+      </form>
+      <footer class="modal-actions">
+        <span class="spacer"></span>
+        <button type="button" class="secondary" @click="closeNewFolder" :disabled="newFolder.busy">Cancel</button>
+        <button type="submit" form="new-folder-form" :disabled="!newFolder.name.trim() || newFolder.busy">Create folder</button>
+      </footer>
+    </article>
+  </dialog>
+
+  <!-- Settings -->
+  <dialog ref="settingsDialog" class="modal" @cancel.prevent @keydown.esc.prevent @close="keepOpen('settingsDialog')">
+    <article v-if="settings.open">
+      <header class="modal-head">
+        <h3>Settings</h3>
+        <button type="button" class="icon-btn modal-x" @click="closeSettings" aria-label="Close" title="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
+      </header>
+
+      <p class="modal-label">Appearance</p>
+      <div role="group" class="volume-steps theme-choice" aria-label="Appearance">
+        <button type="button" :class="{ on: theme === 'light' }" :aria-pressed="theme === 'light'" @click="setTheme('light')">Light</button>
+        <button type="button" :class="{ on: theme === 'dark' }" :aria-pressed="theme === 'dark'" @click="setTheme('dark')">Dark</button>
+      </div>
+
+      <p class="modal-label">Wi-Fi</p>
+      <p v-if="wifi.mode === 'unavailable'" class="field-hint">
+        <strong>Unavailable:</strong> the Wi-Fi service isn't running on the box.
+      </p>
+      <template v-else>
+        <p class="wifi-now">
+          <strong>Connected:</strong>
+          {{ wifi.wifi ? wifi.wifi + " (Wi-Fi)" : wifi.ethernet ? "Ethernet cable" : "not connected" }}
+        </p>
+        <ul class="wifi-saved">
+          <li v-for="n in wifi.saved" :key="n.uuid">
+            <span class="ws-name">{{ n.ssid }}</span>
+            <span v-if="n.ssid === wifi.wifi" class="chip on">In use</span>
+            <span v-else-if="n.rejections" class="chip bad" title="Removed after 2 rejected passwords in a row">Password rejected</span>
+            <button type="button" class="icon-btn danger-icon" @click="removeWifi(n)" :disabled="settings.busy"
+                    :aria-label="'Remove ' + n.ssid" title="Remove">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"></path></svg>
+            </button>
+          </li>
+          <li v-if="!wifi.saved || !wifi.saved.length" class="ws-empty">No saved Wi-Fi networks.</li>
+        </ul>
+        <form class="wifi-add" @submit.prevent="addWifi">
+          <input v-model="settings.ssid" list="wifi-in-range" placeholder="Network name" aria-label="Network name"
+                 autocomplete="off" required maxlength="32">
+          <datalist id="wifi-in-range"><option v-for="n in settings.inRange" :key="n.ssid" :value="n.ssid"></option></datalist>
+          <input v-model="settings.password" type="password" placeholder="Password (empty for an open network)"
+                 aria-label="Password" autocomplete="new-password" maxlength="63">
+          <button type="submit" :disabled="settings.busy || !settings.ssid.trim()">Save network</button>
+        </form>
+        <small class="field-hint">
+          <button type="button" class="link small" @click="scanWifi" :disabled="settings.scanning">
+            {{ settings.scanning ? "Looking\u2026" : "Find networks in range" }}
+          </button>
+          Saved networks are tried when the box starts. Passwords stay on the box.
+        </small>
+        <p v-if="settings.error" class="field-error">{{ settings.error }}</p>
+        <details class="wifi-log">
+          <summary>Wi-Fi log</summary>
+          <ul>
+            <li v-for="(e, i) in wifi.log" :key="i" :class="e.level">
+              <time>{{ dateTime(e.time) }}</time> {{ e.message }}
+            </li>
+            <li v-if="!wifi.log || !wifi.log.length" class="ws-empty">Nothing logged yet.</li>
+          </ul>
+        </details>
+      </template>
+
+      <p class="modal-label">Power</p>
+      <div class="power-buttons">
+        <button type="button" class="secondary outline with-icon" @click="powerAction('restart')" :disabled="power.busy">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 1-2.3-5.6"></path><path d="M20 4v5h-5"></path></svg>
+          Restart
+        </button>
+        <button type="button" class="secondary outline danger with-icon" @click="powerAction('shutdown')" :disabled="power.busy">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v8"></path><path d="M6.3 6.8a8 8 0 1 0 11.4 0"></path></svg>
+          Shut down
+        </button>
+      </div>
+      <small class="field-hint">Shut down before unplugging the box, so nothing on its memory card is left half-written.</small>
+      <p v-if="power.error" class="field-error">{{ power.error }}</p>
+    </article>
+  </dialog>
+
+  <!-- Restarting / shutting down: tells you what's happening. -->
+  <dialog ref="powerDialog" class="modal" @cancel.prevent @keydown.esc.prevent @close="keepOpen('powerDialog')">
+    <article v-if="power.state">
+      <header class="modal-head"><h3>{{ power.state === "restart" ? "Restarting" : "Shutting down" }}</h3></header>
+      <p v-if="power.state === 'restart'" class="setup-done">
+        Tap to Play is restarting. This page reconnects by itself in about a minute.
+      </p>
+      <p v-else class="setup-done">
+        <strong>Shutting down.</strong> When the green light on the Pi stops blinking (about 20 seconds), it's
+        safe to unplug. To turn it back on, plug it back in.
+      </p>
+    </article>
+  </dialog>
+
+  <!-- Wi-Fi setup: shown when the box is hosting "Tap to Play Setup". Can't be closed. -->
+  <dialog ref="setupDialog" class="modal" @cancel.prevent @keydown.esc.prevent @close="keepOpen('setupDialog')">
+    <article v-if="setup.open">
+      <header class="modal-head"><h3>Connect Tap to Play to Wi-Fi</h3></header>
+      <template v-if="!setup.done">
+        <p class="setup-intro">The box couldn't find a Wi-Fi network it knows. Choose yours and enter its password;
+          the box saves it and restarts to join it.</p>
+        <form id="setup-form" class="setup-form" @submit.prevent="submitSetup">
+          <label>
+            Network
+            <select v-model="setup.choice" required>
+              <option value="" disabled>Choose a network…</option>
+              <option v-for="n in setup.inRange" :key="n.ssid" :value="n.ssid">
+                {{ n.ssid }}{{ n.secure ? "" : " (open)" }}
+              </option>
+              <option value="__other">Another network (type its name)</option>
+            </select>
+          </label>
+          <label v-if="setup.choice === '__other'">
+            Network name
+            <input v-model="setup.ssid" maxlength="32" autocomplete="off" required>
+          </label>
+          <label>
+            Password
+            <input v-model="setup.password" type="password" maxlength="63" autocomplete="new-password"
+                   placeholder="Leave empty for an open network">
+          </label>
+          <p v-if="setup.error" class="field-error">{{ setup.error }}</p>
+        </form>
+        <details class="wifi-log" :open="setupErrors.length > 0">
+          <summary>Wi-Fi log<span v-if="setupErrors.length"> ({{ setupErrors.length }} problem{{ setupErrors.length === 1 ? "" : "s" }})</span></summary>
+          <ul>
+            <li v-for="(e, i) in wifi.log" :key="i" :class="e.level"><time>{{ dateTime(e.time) }}</time> {{ e.message }}</li>
+            <li v-if="!wifi.log || !wifi.log.length" class="ws-empty">Nothing logged yet.</li>
+          </ul>
+        </details>
+        <footer class="modal-actions">
+          <span class="spacer"></span>
+          <button type="submit" form="setup-form" :disabled="setup.busy || !setupSsid">Connect</button>
+        </footer>
+      </template>
+      <template v-else>
+        <p class="setup-done"><strong>Saved.</strong> Tap to Play is restarting to join
+          <b>{{ setup.joined }}</b>. The “{{ wifi.setup_ssid }}” network will disappear; reconnect this
+          phone to your usual Wi-Fi. If the password was wrong, the setup network comes back in a few minutes.</p>
+      </template>
+    </article>
+  </dialog>
+
+  <!-- All taps -->
+  <dialog ref="tapsDialog" class="modal wide" @cancel.prevent @keydown.esc.prevent @close="keepOpen('tapsDialog')" @click.self="closeAllTaps">
+    <article v-if="allTaps.open">
+      <header class="modal-head">
+        <h3>All card taps</h3>
+        <button type="button" class="icon-btn modal-x" @click="closeAllTaps" aria-label="Close" title="Close">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+        </button>
+      </header>
+      <input type="search" v-model="allTaps.query" @input="searchTapsSoon" class="taps-search"
+             placeholder="Search by card ID, track file or result" aria-label="Search taps">
+      <p class="field-hint">{{ allTaps.total }} {{ allTaps.total === 1 ? "tap" : "taps" }}{{ allTaps.query.trim() ? " match" : "" }}</p>
+      <div class="table-wrap taps-table">
+        <table>
+          <thead><tr><th>Date</th><th>Card ID</th><th>Track</th><th>Result</th></tr></thead>
+          <tbody>
+            <tr v-for="t in allTaps.rows" :key="t.id">
+              <td class="nowrap">{{ dateTime(t.time) }}</td>
+              <td>
+                <button type="button" class="copy-id" @click="copy(t.uid)" :title="'Copy card ID ' + t.uid"
+                        :aria-label="'Copy card ID ' + t.uid">
+                  <code>{{ t.uid }}</code>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15V5a2 2 0 0 1 2-2h8"></path>
+                  </svg>
+                </button>
+              </td>
+              <td class="track" :title="t.track || ''">{{ t.track ? trackName(t.track) : "—" }}</td>
+              <td><span class="tag" :class="t.result">{{ resultLabel(t.result) }}</span></td>
+            </tr>
+          </tbody>
+        </table>
+        <p v-if="allTaps.busy && !allTaps.rows.length" class="empty">Loading&hellip;</p>
+        <p v-else-if="!allTaps.rows.length" class="empty">No taps found.</p>
+      </div>
+      <p v-if="allTaps.error" class="field-error">{{ allTaps.error }}</p>
+      <footer class="modal-actions pager-bar">
+        <nav class="pager" aria-label="Pages">
+          <button type="button" class="icon-btn" @click="loadTapsPage(allTaps.page - 1)"
+                  :disabled="allTaps.page <= 1 || allTaps.busy" aria-label="Previous page" title="Previous page">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg>
+          </button>
+          <span>Page {{ allTaps.page }} of {{ allTaps.pages }}</span>
+          <button type="button" class="icon-btn" @click="loadTapsPage(allTaps.page + 1)"
+                  :disabled="allTaps.page >= allTaps.pages || allTaps.busy" aria-label="Next page" title="Next page">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"></path></svg>
+          </button>
+        </nav>
+      </footer>
+    </article>
+  </dialog>
+
+  <!-- Edit card -->
+  <dialog ref="editDialog" class="modal" @cancel.prevent @keydown.esc.prevent @close="keepOpen('editDialog')" @click.self="closeEdit">
+    <article v-if="edit.open">
+      <header class="modal-head">
+        <h3>Edit card</h3>
+        <button type="button" class="icon-btn modal-x" @click="closeEdit" aria-label="Close" title="Close" :disabled="edit.busy">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+        </button>
+      </header>
+      <label>
+        Card ID
+        <input v-model.trim="edit.uid" spellcheck="false" autocomplete="off" :aria-invalid="editIdError ? 'true' : null">
+        <small v-if="editIdError" class="field-error">{{ editIdError }}</small>
+        <small v-else class="field-hint">The ID the reader sees on this card. Change it only to move these tracks to a different card.</small>
+      </label>
+      <label>
+        Name
+        <input ref="editNameInput" v-model="edit.name" class="name-input" maxlength="80" autocomplete="off"
+               :placeholder="editTagName || 'Name from the tags'">
+        <small v-if="editNameToSave && editTagName" class="original-name" :title="editTagName">
+          <strong>Original:</strong> {{ editTagName }}
+        </small>
+      </label>
+      <p class="modal-label">Plays</p>
+      <track-picker :items="libraryItems" v-model="edit.tracks"></track-picker>
+      <card-options :track-count="edit.tracks.length" v-model:shuffle="edit.shuffle"
+                    v-model:repeat="edit.repeat" v-model:remember-playback="edit.remember"></card-options>
+      <p v-if="editNameDropped || editArtDropped" class="field-hint">
+        When the card plays something else, its
+        {{ editNameDropped && editArtDropped ? "custom name and artwork are" : editNameDropped ? "custom name is" : "artwork is" }}
+        cleared, since they belong to the old track.
+      </p>
+
+      <p class="modal-label">Artwork</p>
+      <div class="art-row">
+        <div class="art-preview">
+          <img v-if="editArtUrl" :src="editArtUrl" :key="editArtUrl" alt="" @error="noCover[editArtKey] = true">
+          <div v-else class="mc-art-empty" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="3"></rect><circle cx="9" cy="9" r="2"></circle><path d="M21 15l-5-5L5 21"></path>
+            </svg>
+          </div>
+        </div>
+        <div class="art-actions">
+          <div class="art-buttons">
+            <button type="button" class="secondary outline" @click="$refs.artFile.click()" :disabled="artBusy">Upload image</button>
+            <input ref="artFile" type="file" accept="image/jpeg,image/png,image/webp,image/gif" hidden @change="uploadArt">
+            <button type="button" class="secondary outline" :class="{ active: artSearch.open }" @click="toggleArtSearch" :disabled="artBusy">Find online</button>
+            <button v-if="editHasOwnArt" type="button" class="secondary outline danger" @click="removeArt" :disabled="artBusy">Remove</button>
+          </div>
+          <small class="field-hint">
+            <template v-if="edit.artPending"><strong>Not saved yet:</strong> {{ artPendingText }}</template>
+            <template v-else>{{ edit.art_version ? "This card's own artwork." : "From the music files." }}</template>
+          </small>
+        </div>
+      </div>
+      <p v-if="artError" class="field-error">{{ artError }}</p>
+
+      <div v-if="artSearch.open" class="art-search">
+        <form class="art-search-form" @submit.prevent="searchArt">
+          <input v-model="artSearch.q" placeholder="Album or title" aria-label="Album or title" required>
+          <input v-model="artSearch.artist" placeholder="Artist (optional)" aria-label="Artist">
+          <button type="submit" :disabled="artSearch.busy || !artSearch.q.trim()">Search</button>
+        </form>
+        <p v-if="artSearch.busy" class="field-hint art-wait"><span class="tap-pulse" aria-hidden="true"></span>Searching MusicBrainz&hellip;</p>
+        <div v-else-if="artSearch.results.length" class="art-results">
+          <button v-for="r in artSearch.results" :key="r.id" type="button" class="art-result"
+                  :disabled="artBusy" @click="pickArt(r)" :title="'Use the cover of ' + r.title">
+            <img :src="'/api/artwork/thumb/' + r.id" alt="" loading="lazy">
+            <span class="ar-title">{{ r.title }}</span>
+            <span class="ar-meta">{{ [r.artist, r.year].filter(Boolean).join(" · ") }}</span>
+          </button>
+        </div>
+        <p v-else-if="artSearch.searched" class="field-hint">No covers found. Try fewer words, or leave out the artist. Old or rare records are often missing; upload an image instead.</p>
+        <small class="field-hint">Searches the MusicBrainz database and Cover Art Archive. Your search words and the Pi's internet address are sent to them.</small>
+      </div>
+      <p v-if="edit.error" class="field-error">{{ edit.error }}</p>
+      <footer class="modal-actions">
+        <button type="button" class="secondary outline danger" @click="removeEditing" :disabled="edit.busy">Remove card</button>
+        <span class="spacer"></span>
+        <button type="button" class="secondary" @click="closeEdit" :disabled="edit.busy">Cancel</button>
+        <button type="button" @click="saveEdit" :disabled="!editChanged || !!editIdError || edit.busy">Save</button>
+      </footer>
+    </article>
+  </dialog>
+
+  <!-- Assign new card -->
+  <dialog ref="assignDialog" class="modal" @cancel.prevent @keydown.esc.prevent @close="keepOpen('assignDialog')">
+    <article v-if="assign.open">
+      <header class="modal-head">
+        <h3>Assign new card</h3>
+        <button type="button" class="icon-btn modal-x" @click="closeAssign" aria-label="Close" title="Close" :disabled="assign.busy">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+        </button>
+      </header>
+
+      <p class="modal-label">Tap a card on the box</p>
+      <div class="tap-zone" :class="{ got: assign.uid, warn: assignExisting }">
+        <template v-if="!assign.uid">
+          <span class="tap-pulse" aria-hidden="true"></span>
+          <div>
+            <b>Waiting for a card&hellip;</b>
+            <small>Place a card on the reader. It won't play while this window is open.</small>
+          </div>
+        </template>
+        <template v-else>
+          <svg class="tap-ok" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M5 12.5l4.5 4.5L19 7.5"></path>
+          </svg>
+          <div>
+            <b>Card <code>{{ assign.uid }}</code></b>
+            <small v-if="assignExisting">Already assigned to <b>{{ assignExisting.name }}</b>.</small>
+            <small v-else>Not assigned yet.</small>
+            <small>Tap another card to use that one instead.</small>
+          </div>
+        </template>
+      </div>
+
+      <p class="modal-label">Pick the tracks it plays</p>
+      <track-picker :items="libraryItems" v-model="assign.tracks"></track-picker>
+      <card-options :track-count="assign.tracks.length" v-model:shuffle="assign.shuffle"
+                    v-model:repeat="assign.repeat" v-model:remember-playback="assign.remember"></card-options>
+
+      <p v-if="assignSame" class="field-hint">This card already plays exactly these tracks.</p>
+      <p v-else-if="assignExisting && assign.tracks.length" class="reassign-warning" role="alert">
+        Reassigning replaces <b>{{ assignExisting.name }}</b> on this card with <b>{{ selectionName(assign.tracks) }}</b>.
+      </p>
+      <p v-if="assign.error" class="field-error">{{ assign.error }}</p>
+      <footer class="modal-actions">
+        <span class="spacer"></span>
+        <button type="button" class="secondary" @click="closeAssign" :disabled="assign.busy">Cancel</button>
+        <button type="button" :class="{ warning: assignExisting && !assignSame }" @click="confirmAssign"
+                :disabled="!assign.uid || !assign.tracks.length || assignSame || assign.busy">
+          {{ assignExisting ? "Reassign" : "Assign" }}
+        </button>
+      </footer>
+    </article>
+  </dialog>
+
+  <!-- Play Mode: full screen Now Playing -->
+  <div v-if="playMode" ref="playModeEl" class="play-mode" role="dialog" aria-modal="true" aria-label="Play Mode"
+       tabindex="-1">
+    <div v-if="coverUrl" class="pm-backdrop" :style="{ backgroundImage: 'url(' + coverUrl + ')' }" aria-hidden="true"></div>
+    <button type="button" class="pm-close" @click="closePlayMode" aria-label="Leave Play Mode" title="Leave Play Mode (Esc)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+    </button>
+    <div class="pm-body">
+      <div class="pm-art">
+        <img v-if="coverUrl && playing" :src="coverUrl" :key="coverUrl" alt="" @error="coverFailed = now.cover">
+        <div v-else class="pm-art-empty" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 18V5l11-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="17" cy="16" r="3"></circle>
+          </svg>
+        </div>
+      </div>
+      <div class="pm-info">
+        <span class="pill" :class="now.state">{{ nowLabel }}</span>
+        <template v-if="playing">
+          <h2 class="pm-title">{{ now.name }}</h2>
+          <p class="pm-meta">
+            <span v-if="now.artist">{{ now.artist }}</span>
+            <span v-if="now.parts > 1"><span v-if="now.artist"> &middot; </span>Track {{ now.track_no || now.part + 1 }} of {{ now.parts }}</span>
+          </p>
+          <p v-if="now.parts > 1" class="pm-part">{{ now.part_title }}</p>
+          <playback-controls v-if="now.state !== 'finished'" large :now="now" :position="shownPosition"
+                             :in-chime="inChime" :disabled="!canControl" :hint="controlHint"
+                             @toggle-pause="togglePause" @previous="control('previous')" @next="control('next')"
+                             @shuffle="setMode('shuffle', $event)" @repeat="setMode('repeat', $event)"
+                             @draft="seekDraft = $event" @seek="commitSeek"></playback-controls>
+          <p v-else class="pm-hint">Finished. Lift the card and put it back to hear it again.</p>
+        </template>
+        <template v-else>
+          <h2 class="pm-title muted-title">{{ now.state === "unknown" ? "Unknown card" : "Nothing playing" }}</h2>
+          <p class="pm-hint">Place a card on the reader to play its tracks.</p>
+        </template>
+        <volume-bar :volume="volume" :busy="volumeBusy" @set="setVolume"></volume-bar>
+      </div>
+    </div>
+  </div>
+
+  <!-- A popover, so it shows above modal windows and Play Mode full screen too. -->
+  <div ref="toast" popover="manual" class="toast" :class="[toast.kind, { show: toast.show }]" role="status">{{ toast.text }}</div>
+</main>
+</body>
+</html>

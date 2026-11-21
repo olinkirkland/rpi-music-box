@@ -131,6 +131,35 @@ Watch what it is doing (card taps, unknown cards, errors):
 journalctl -u musicbox -f
 ```
 
+## Web page
+
+While the service runs, open `http://<hostname>.local/` (for example
+`http://berry.local/`) from any device on the same network. If that name
+doesn't resolve on a device, use the Pi's address instead: `hostname -I`
+prints it. It has:
+
+- **Now playing:** the song on the reader, with pause/resume and a slider
+  to skip to any point, or what happened to the last tap (unknown card,
+  file missing, blocked by the volume check). Pause, resume and skip only
+  work on the song from the current tap while its card is on the reader;
+  the page can never start a song, and resuming re-checks the volume.
+- **Volume:** buttons for 0, 20, 40, 60, 80 and 100%. It applies at once
+  (0% also mutes), and the before/during-playback volume checks use the
+  level you pick. It goes back to `mixer_volume` when the box restarts.
+- **Cards:** change a card's song, remove it, or assign a new one. Tap a new
+  card and press **Assign** next to it in the log.
+- **Card taps:** every tap, newest first.
+
+It updates live (Server-Sent Events from `/api/events`), with no refresh.
+There is no password.
+
+Taps are stored in `~/.local/share/musicbox/taps.db` (SQLite). Change the port
+or turn the page off with `web_port` / `web_enabled` in the config.
+
+The page is plain files in `musicbox/static/`, built with Vue 3 and Pico CSS,
+which are vendored in `musicbox/static/vendor/` (see the README there), so
+there is no build step and no internet connection needed.
+
 ## Configuration
 
 Optional. Copy `config.example.toml` to `~/.config/musicbox/config.toml` and
@@ -142,14 +171,33 @@ The card mapping lives in `~/.config/musicbox/cards.json`, a plain
 
 ## Behaviour
 
-- Card placed: its track plays from the start.
-- Card removed: playback stops.
+- Card placed: the chime plays, then the card's track from the start (for
+  `play_seconds` if set, otherwise the whole track).
+- Card removed: playback stops, and a short removal chime plays.
 - Track ends with the card still on the reader: silence. Lift and replace the
   card to hear it again.
 - A different card placed: switches to that card's track.
-- Unknown card: nothing plays, and its UID is logged.
+- Unknown card: only the chime plays, and its UID is logged.
 - The service restarts itself if it crashes and reconnects if the reader
   glitches.
+
+### Sound safety
+
+Sound only ever plays because of a card on the reader: placing one (the
+chime, then its tracks), lifting one (the removal chime), or tapping one while
+the Assign window is open (the assign chime, never the tracks). The three
+chimes ship in `musicbox/sounds/`; see `config.example.toml` to swap them.
+
+- Nothing plays at start-up, even if a card is already on the reader (lift
+  and replace it to play), and a reader glitch is never taken as a tap.
+- A track only plays after the chime. Without a usable `chime_file`, nothing
+  plays at all. There is no built-in sound.
+- With `mixer_volume` set, the sound card's hardware volume is set and read
+  back before every sound. If it can't be confirmed at or below that value,
+  nothing plays. It is re-checked every half second during playback, and
+  playback is killed if it goes above.
+- With `play_seconds` set, mpv stops the track after that long, and the box
+  kills mpv if it ever runs past its time.
 
 ## Troubleshooting
 

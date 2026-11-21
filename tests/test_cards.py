@@ -12,13 +12,13 @@ def store(tmp_path):
 
 
 def test_assign_and_lookup(store):
-    assert store.assign("aa", store.music_dir / "album" / "song.mp3") == "album/song.mp3"
+    assert store.assign("aa", store.music_dir / "album" / "song.mp3") == ["album/song.mp3"]
     assert store.track_for("aa") == store.music_dir / "album" / "song.mp3"
     assert store.track_for("bb") is None
 
 
 def test_path_relative_to_music_dir(store):
-    assert store.assign("aa", "album/song.mp3") == "album/song.mp3"
+    assert store.assign("aa", "album/song.mp3") == ["album/song.mp3"]
 
 
 def test_rejects_tracks_outside_music_dir(store, tmp_path):
