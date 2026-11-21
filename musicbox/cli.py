@@ -15,6 +15,7 @@ from .chime import duration as chime_duration
 from .chime import prepare_chime
 from .cards import CardStore
 from .config import load_config
+from .events import EventBus
 from .player import Mixer, Player
 from .reader import Reader
 from .taplog import TapLog
@@ -32,9 +33,10 @@ def cmd_run(args, config, cards) -> int:
     # `finally` in MusicBox.run() silences the player.
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
     taplog = TapLog(config.taps_file)
+    events = EventBus()
     if config.web_enabled:
         try:
-            start_web(taplog, cards, port=config.web_port)
+            start_web(taplog, cards, events, port=config.web_port)
         except OSError as e:
             # Never let the web page keep the music from working.
             logging.error("web page disabled: cannot listen on port %d (%s)", config.web_port, e)
@@ -60,6 +62,7 @@ def cmd_run(args, config, cards) -> int:
         cards=cards,
         misses_to_remove=config.misses_to_remove,
         taplog=taplog,
+        events=events,
     )
     logging.info("music box ready: %d cards, music in %s", len(cards.all()), config.music_dir)
     box.run()

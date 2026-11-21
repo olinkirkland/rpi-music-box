@@ -134,12 +134,24 @@ journalctl -u musicbox -f
 ## Web page
 
 While the service runs, open `http://<pi-address>:8080/` from any device on
-the same network (find the address with `hostname -I`). It shows every card
-tap, newest first, with the card ID, its track and whether it played, and
-refreshes itself every few seconds. The page is read-only and has no password.
+the same network (find the address with `hostname -I`). It has:
+
+- **Now playing:** the song on the reader, with a progress bar, or what
+  happened to the last tap (unknown card, file missing, blocked by the
+  volume check).
+- **Cards:** change a card's song, remove it, or assign a new one. Tap a new
+  card and press **Assign** next to it in the log.
+- **Card taps:** every tap, newest first.
+
+It updates live (Server-Sent Events from `/api/events`), with no refresh.
+There is no password, and nothing on the page can start a sound.
 
 Taps are stored in `~/.local/share/musicbox/taps.db` (SQLite). Change the port
 or turn the page off with `web_port` / `web_enabled` in the config.
+
+The page is plain files in `musicbox/static/`, built with Vue 3 and Pico CSS,
+which are vendored in `musicbox/static/vendor/` (see the README there), so
+there is no build step and no internet connection needed.
 
 ## Configuration
 

@@ -35,16 +35,19 @@ class TapLog:
         return db
 
     def record(self, uid: str, track: str | None, result: str,
-               when: float | None = None) -> None:
+               when: float | None = None) -> dict:
+        """Store a tap and return it as a row, like recent() does."""
+        when = time.time() if when is None else when
         db = self._connect()
         try:
             with db:
-                db.execute(
+                cur = db.execute(
                     "INSERT INTO taps (time, uid, track, result) VALUES (?, ?, ?, ?)",
-                    (time.time() if when is None else when, uid, track, result),
+                    (when, uid, track, result),
                 )
         finally:
             db.close()
+        return {"id": cur.lastrowid, "time": when, "uid": uid, "track": track, "result": result}
 
     def recent(self, limit: int = 500) -> list[dict]:
         """Newest taps first."""

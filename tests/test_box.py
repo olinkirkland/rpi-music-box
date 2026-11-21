@@ -14,6 +14,8 @@ class FakeReader:
 
 
 class FakePlayer:
+    playing = True  # as if each song were still going
+
     def __init__(self):
         self.events = []
 

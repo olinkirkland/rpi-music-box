@@ -115,3 +115,21 @@ def test_rejects_non_json_body(server):
     with pytest.raises(HTTPError) as e:
         urlopen(req)
     assert e.value.code == 415
+
+
+def test_static_assets_served_and_contained(server):
+    _, base = server
+    with urlopen(base + "/static/app.js") as r:
+        assert r.headers["Content-Type"].startswith("text/javascript")
+    with urlopen(base + "/static/vendor/pico-2.0.6.min.css") as r:
+        assert "immutable" in r.headers["Cache-Control"]
+    for bad in ("/static/../web.py", "/static/%2e%2e/web.py", "/static/nope.js", "/static/"):
+        with pytest.raises(HTTPError) as e:
+            urlopen(base + bad)
+        assert e.value.code == 404, bad
+
+
+def test_now_endpoint_defaults_to_idle(server):
+    _, base = server
+    code, data = call(base, "GET", "/api/now")
+    assert code == 200 and data["state"] == "idle" and "server_time" in data

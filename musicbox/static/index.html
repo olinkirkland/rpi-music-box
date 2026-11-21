@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Olin's Music Box</title>
+<script>
+  // Pick the theme before anything draws, so there is no flash of the wrong
+  // one: the choice saved on this device, else the device's own setting.
+  (function () {
+    var t = null;
+    try { t = localStorage.getItem("musicbox-theme"); } catch (e) {}
+    if (t !== "light" && t !== "dark") {
+      t = window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    }
+    document.documentElement.setAttribute("data-theme", t);
+  })();
+</script>
+<link rel="stylesheet" href="/static/vendor/pico-2.0.6.min.css">
+<link rel="stylesheet" href="/static/style.css">
+<script type="module" src="/static/app.js"></script>
+</head>
+<body>
+<main class="container" id="app" v-cloak>
+  <header class="page-head">
+    <div>
+      <h1><span class="note" aria-hidden="true">&#9835;</span> Olin's <span class="accent">Music Box</span></h1>
+      <p class="sub">Tap a card, hear a song.</p>
+    </div>
+    <div class="head-tools">
+      <span class="live" :class="connection" :title="connectionLabel">
+        <span class="dot" aria-hidden="true"></span>{{ connectionLabel }}
+      </span>
+      <button type="button" class="theme-toggle" @click="toggleTheme"
+              :aria-label="theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'"
+              :title="theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'">
+        <svg v-if="theme === 'dark'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="4.5"></circle>
+          <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"></path>
+        </svg>
+        <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M20.5 14.5A8.5 8.5 0 1 1 9.5 3.5a7 7 0 0 0 11 11z"></path>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- Currently playing -->
+  <article class="now" :class="'now-' + now.state" aria-live="polite">
+    <div class="now-label">
+      <span class="pill" :class="now.state">{{ nowLabel }}</span>
+      <code v-if="now.uid" class="uid">{{ now.uid }}</code>
+    </div>
+
+    <template v-if="now.state === 'idle'">
+      <h2 class="now-title muted-title">Nothing playing</h2>
+      <p class="now-hint">Place a card on the reader to play its song.</p>
+    </template>
+
+    <template v-else-if="now.state === 'playing' || now.state === 'finished'">
+      <h2 class="now-title">{{ now.name }}</h2>
+      <template v-if="now.state === 'playing'">
+        <progress v-if="now.duration" :value="elapsed" :max="now.duration"></progress>
+        <progress v-else></progress>
+        <p class="now-time">
+          <span v-if="inChime">Chime&hellip;</span>
+          <span v-else>{{ clock(elapsed) }}</span>
+          <span v-if="now.duration"> / {{ clock(now.duration) }}</span>
+        </p>
+      </template>
+      <p v-else class="now-hint">Finished. Lift the card and put it back to hear it again.</p>
+    </template>
+
+    <template v-else-if="now.state === 'waiting'">
+      <h2 class="now-title muted-title">{{ cardName(now.uid) || "Card on the reader" }}</h2>
+      <p class="now-hint">This card was already there when the box started. Lift it and put it back to play.</p>
+    </template>
+
+    <template v-else-if="now.state === 'unknown'">
+      <h2 class="now-title muted-title">Unknown card</h2>
+      <p class="now-hint">No song is assigned to this card yet.</p>
+      <button type="button" class="outline" @click="prefill(now.uid)">Assign a song</button>
+    </template>
+
+    <template v-else-if="now.state === 'missing'">
+      <h2 class="now-title">{{ now.name }}</h2>
+      <p class="now-hint bad">This song's file is missing from the music folder.</p>
+    </template>
+
+    <template v-else-if="now.state === 'blocked'">
+      <h2 class="now-title">{{ now.name }}</h2>
+      <p class="now-hint bad">Not played: the speaker volume couldn't be confirmed at a safe level. Check the speaker is plugged in.</p>
+    </template>
+  </article>
+
+  <!-- Cards -->
+  <article>
+    <header class="panel-head">
+      <h2>Cards</h2>
+      <small>{{ cards.length }} {{ cards.length === 1 ? "card" : "cards" }} &middot; {{ tracks.length }} songs</small>
+    </header>
+    <div class="table-wrap">
+      <table class="striped">
+        <thead><tr><th>Card ID</th><th>Song</th><th></th></tr></thead>
+        <tbody>
+          <tr v-for="c in cards" :key="c.uid" :class="{ active: c.uid === now.uid && now.state === 'playing' }">
+            <td><code>{{ c.uid }}</code></td>
+            <td>
+              <select :value="c.track" @change="assign(c.uid, $event.target.value)" :aria-label="'Song for card ' + c.uid">
+                <option v-if="!tracks.includes(c.track)" :value="c.track">{{ c.track }}</option>
+                <option v-for="t in tracks" :key="t" :value="t">{{ t }}</option>
+              </select>
+              <small v-if="c.missing" class="bad">File missing</small>
+            </td>
+            <td class="actions">
+              <button type="button" class="secondary outline small" @click="removeCard(c.uid)">Remove</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <p v-if="!cards.length" class="empty">No cards assigned yet.</p>
+    </div>
+    <footer>
+      <form class="add" @submit.prevent="addCard">
+        <input ref="uidInput" v-model.trim="form.uid" placeholder="Card ID" autocomplete="off"
+               spellcheck="false" aria-label="Card ID" required>
+        <select v-model="form.track" aria-label="Song" required>
+          <option value="" disabled>{{ tracks.length ? "Choose a song…" : "No songs found" }}</option>
+          <option v-for="t in tracks" :key="t" :value="t">{{ t }}</option>
+        </select>
+        <button type="submit">Assign</button>
+      </form>
+      <small class="hint">Tap a new card on the box, then press <b>Assign</b> next to it in the log below.</small>
+    </footer>
+  </article>
+
+  <!-- Tap log -->
+  <article>
+    <header class="panel-head">
+      <h2>Card taps</h2>
+      <small>{{ taps.length }} shown</small>
+    </header>
+    <div class="table-wrap scroll">
+      <table>
+        <thead><tr><th class="hide-sm">#</th><th>Date</th><th>Card ID</th><th>Track</th><th>Result</th><th></th></tr></thead>
+        <tbody>
+          <tr v-for="t in taps" :key="t.id" :class="{ fresh: t.id === freshTap }">
+            <td class="hide-sm muted">{{ t.id }}</td>
+            <td class="nowrap">{{ dateTime(t.time) }}</td>
+            <td><code>{{ t.uid }}</code></td>
+            <td class="track">{{ t.track || "—" }}</td>
+            <td><span class="tag" :class="t.result">{{ resultLabel(t.result) }}</span></td>
+            <td class="actions">
+              <button v-if="!cardUids.has(t.uid)" type="button" class="link small" @click="prefill(t.uid)">Assign</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <p v-if="!taps.length" class="empty">No cards tapped yet.</p>
+    </div>
+  </article>
+
+  <div class="toast" :class="[toast.kind, { show: toast.show }]" role="status">{{ toast.text }}</div>
+</main>
+</body>
+</html>

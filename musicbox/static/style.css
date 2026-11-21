@@ -1,0 +1,196 @@
+/* Our layer on top of Pico CSS: a warm accent, status colours, and the
+   "now playing" tile. Colours are tokens so light and dark stay in step. */
+
+/* Size: a fixed 15px base. Pico grows the root font with the window width
+   (up to 131%), which made everything oversized on a desktop screen. Same
+   selector as Pico's, loaded later, so this wins at every width. */
+:root {
+  --pico-font-size: 93.75%;
+  --pico-line-height: 1.5;
+  --pico-spacing: 0.875rem;
+  --pico-typography-spacing-vertical: 0.75rem;
+  --pico-block-spacing-vertical: 1.25rem;
+  --pico-block-spacing-horizontal: 1rem;
+  --pico-form-element-spacing-vertical: 0.45rem;
+  --pico-form-element-spacing-horizontal: 0.75rem;
+  --pico-border-radius: 0.5rem;
+}
+
+/* Colour: a blue theme. The page always carries data-theme="light" or
+   "dark" on <html> (set by a script in index.html before anything draws:
+   your saved choice, else the device setting), so exactly one block below
+   applies and every token is defined in both. */
+:root:not([data-theme=dark]),
+:root[data-theme=light] {
+  color-scheme: light;
+  --mb-accent: #2463d6;
+  --mb-accent-hover: #1a4fb3;
+  --mb-accent-soft: #e2ebfb;
+  --mb-ok: #217a4b;
+  --mb-warn: #9a6100;
+  --mb-bad: #b3261e;
+  --mb-fresh: #dfeafd;
+  --pico-background-color: #f2f5f9;
+  --pico-card-background-color: #ffffff;
+  --pico-card-sectioning-background-color: #f8fafc;
+  --pico-color: #1e2733;
+  --pico-h1-color: #141b25;
+  --pico-h2-color: #141b25;
+  --pico-muted-color: #5d6a7a;
+  --pico-muted-border-color: #e1e7ef;
+  --pico-table-border-color: #e1e7ef;
+  --pico-form-element-background-color: #ffffff;
+  --pico-form-element-border-color: #cdd6e1;
+  --pico-form-element-color: #1e2733;
+  --pico-primary-focus: rgba(36, 99, 214, 0.28);
+  --pico-primary-inverse: #ffffff;
+  --pico-primary: var(--mb-accent);
+  --pico-primary-background: var(--mb-accent);
+  --pico-primary-border: var(--mb-accent);
+  --pico-primary-hover: var(--mb-accent-hover);
+  --pico-primary-hover-background: var(--mb-accent-hover);
+  --pico-primary-hover-border: var(--mb-accent-hover);
+  --pico-primary-underline: var(--mb-accent-soft);
+  --pico-form-element-focus-color: var(--mb-accent);
+}
+
+:root[data-theme=dark] {
+  color-scheme: dark;
+  --mb-accent: #6fa6ff;
+  --mb-accent-hover: #93bcff;
+  --mb-accent-soft: #1c2b45;
+  --mb-ok: #6cc28f;
+  --mb-warn: #e0b04f;
+  --mb-bad: #f08a80;
+  --mb-fresh: #1f3354;
+  --pico-background-color: #0e131a;
+  --pico-card-background-color: #161c25;
+  --pico-card-sectioning-background-color: #1a212b;
+  --pico-color: #dfe6ef;
+  --pico-h1-color: #eef3f9;
+  --pico-h2-color: #eef3f9;
+  --pico-muted-color: #93a1b3;
+  --pico-muted-border-color: #28313d;
+  --pico-table-border-color: #28313d;
+  --pico-form-element-background-color: #111720;
+  --pico-form-element-border-color: #33404f;
+  --pico-form-element-color: #dfe6ef;
+  --pico-primary-focus: rgba(111, 166, 255, 0.3);
+  --pico-primary-inverse: #0b1320;
+  --pico-primary: var(--mb-accent);
+  --pico-primary-background: var(--mb-accent);
+  --pico-primary-border: var(--mb-accent);
+  --pico-primary-hover: var(--mb-accent-hover);
+  --pico-primary-hover-background: var(--mb-accent-hover);
+  --pico-primary-hover-border: var(--mb-accent-hover);
+  --pico-primary-underline: var(--mb-accent-soft);
+  --pico-form-element-focus-color: var(--mb-accent);
+}
+
+/* Pico paints table cells with the page background; inside a card they
+   should match the card. */
+article { --pico-background-color: var(--pico-card-background-color); }
+
+[v-cloak] { display: none; }
+
+body { background: var(--pico-background-color); }
+main.container { max-width: 880px; padding-top: 1.5rem; padding-bottom: 2.5rem; }
+
+/* Header */
+.page-head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 1.25rem; }
+.page-head h1 { margin: 0; font-size: 1.5rem; line-height: 1.2; letter-spacing: -0.01em; }
+.page-head .accent, .page-head .note { color: var(--mb-accent); }
+.sub { margin: 0.25rem 0 0; color: var(--pico-muted-color); }
+.live { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; color: var(--pico-muted-color); white-space: nowrap; }
+.live .dot { width: 0.55rem; height: 0.55rem; border-radius: 50%; background: var(--pico-muted-color); }
+.live.live .dot { background: var(--mb-ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--mb-ok) 25%, transparent); }
+.live.offline .dot { background: var(--mb-warn); }
+.head-tools { display: flex; align-items: center; gap: 0.75rem; }
+.theme-toggle {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 2rem; height: 2rem; padding: 0; margin: 0; border-radius: 50%;
+  background: transparent; border: 1px solid var(--pico-muted-border-color);
+  color: var(--pico-muted-color);
+}
+.theme-toggle:hover, .theme-toggle:focus-visible { color: var(--mb-accent); border-color: var(--mb-accent); background: transparent; }
+.theme-toggle svg { width: 1rem; height: 1rem; }
+
+/* Panels */
+article { padding: 0; overflow: hidden; }
+article > header, article > footer { margin: 0; padding: 0.7rem 1rem; }
+.panel-head { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; }
+.panel-head h2 { margin: 0; font-size: 0.95rem; font-weight: 600; }
+.panel-head small, footer .hint { font-size: 0.8rem; }
+.panel-head small, .hint { color: var(--pico-muted-color); }
+.table-wrap { overflow-x: auto; }
+.table-wrap.scroll { max-height: 60vh; overflow-y: auto; }
+table { margin: 0; }
+th, td { padding: 0.45rem 1rem; vertical-align: middle; font-size: 0.9rem; }
+thead th { position: sticky; top: 0; z-index: 1; background: var(--pico-card-background-color); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--pico-muted-color); }
+td select { margin: 0; padding-top: 0.3rem; padding-bottom: 0.3rem; min-width: 12rem; font-size: 0.875rem; }
+input, select, button { font-size: 0.9rem; }
+td.actions { text-align: right; white-space: nowrap; width: 1%; }
+td.track { word-break: break-word; }
+td.nowrap { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.muted { color: var(--pico-muted-color); font-variant-numeric: tabular-nums; }
+code { font-size: 0.85em; }
+.empty { padding: 1.25rem; margin: 0; text-align: center; color: var(--pico-muted-color); }
+tr.active td { background: var(--mb-accent-soft); }
+tr.fresh td { animation: fresh 2.5s ease-out; }
+@keyframes fresh { from { background: var(--mb-fresh); } to { background: transparent; } }
+
+button.small { padding: 0.25rem 0.6rem; font-size: 0.8rem; margin: 0; }
+button.link { background: none; border: none; color: var(--mb-accent); font-weight: 600; padding: 0.2rem 0.4rem; }
+button.link:hover { text-decoration: underline; }
+
+.add { display: grid; grid-template-columns: minmax(8rem, 1fr) minmax(0, 2.5fr) auto; gap: 0.6rem; margin: 0 0 0.4rem; align-items: center; }
+/* One row height for the ID field, song list and button. Pico pads them
+   differently (the select has room for its arrow), so set it outright. */
+.add > input, .add > select, .add > button {
+  margin: 0; height: 2.4rem; padding-top: 0; padding-bottom: 0; line-height: 1;
+}
+.add > button { padding-left: 1.1rem; padding-right: 1.1rem; }
+
+.tag { font-size: 0.8rem; font-weight: 600; white-space: nowrap; }
+.tag.played { color: var(--mb-ok); }
+.tag.unknown { color: var(--mb-warn); }
+.tag.missing, .tag.blocked, .bad { color: var(--mb-bad); }
+
+/* Now playing */
+.now { padding: 1rem 1.25rem 1.1rem; border-left: 4px solid var(--pico-muted-border-color); }
+.now.now-playing { border-left-color: var(--mb-accent); }
+.now.now-finished, .now.now-waiting { border-left-color: var(--pico-muted-color); }
+.now.now-unknown { border-left-color: var(--mb-warn); }
+.now.now-missing, .now.now-blocked { border-left-color: var(--mb-bad); }
+.now-label { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.6rem; }
+.pill { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; padding: 0.2rem 0.55rem; border-radius: 999px; background: var(--pico-muted-border-color); color: var(--pico-muted-color); }
+.pill.playing { background: var(--mb-accent); color: var(--pico-primary-inverse); }
+.pill.playing::before { content: ""; display: inline-block; width: 0.45rem; height: 0.45rem; margin-right: 0.4rem; border-radius: 50%; background: currentColor; animation: pulse 1.2s ease-in-out infinite; vertical-align: 0.05em; }
+.pill.unknown { background: color-mix(in srgb, var(--mb-warn) 18%, transparent); color: var(--mb-warn); }
+.pill.missing, .pill.blocked { background: color-mix(in srgb, var(--mb-bad) 15%, transparent); color: var(--mb-bad); }
+@keyframes pulse { 50% { opacity: 0.35; } }
+.uid { color: var(--pico-muted-color); }
+.now-title { margin: 0 0 0.6rem; font-size: 1.15rem; font-weight: 600; line-height: 1.3; word-break: break-word; }
+.muted-title { color: var(--pico-muted-color); }
+.now progress { margin: 0 0 0.3rem; height: 0.4rem; }
+.now-time { margin: 0; font-variant-numeric: tabular-nums; color: var(--pico-muted-color); font-size: 0.8rem; }
+.now-hint { margin: 0 0 0.6rem; color: var(--pico-muted-color); font-size: 0.9rem; }
+.now-hint:last-child { margin-bottom: 0; }
+.now button { margin: 0; }
+
+/* Toast */
+.toast { position: fixed; left: 50%; bottom: 1.5rem; transform: translateX(-50%); max-width: calc(100vw - 2rem); background: var(--pico-color); color: var(--pico-background-color); padding: 0.55rem 1rem; border-radius: 0.5rem; font-size: 0.9rem; opacity: 0; transition: opacity 0.2s; pointer-events: none; z-index: 10; }
+.toast.show { opacity: 1; }
+.toast.error { background: var(--mb-bad); color: #fff; }
+
+@media (max-width: 600px) {
+  main.container { padding-left: 1rem; padding-right: 1rem; padding-top: 1.25rem; }
+  .page-head h1 { font-size: 1.3rem; }
+  th, td { padding: 0.45rem 0.6rem; }
+  article > header, article > footer { padding: 0.65rem 0.75rem; }
+  .now { padding: 0.9rem 0.9rem 1rem; }
+  .hide-sm { display: none; }
+  td select { min-width: 9rem; }
+  .add { grid-template-columns: 1fr auto; }
+  .add select { grid-column: 1 / -1; grid-row: 2; }
+}
