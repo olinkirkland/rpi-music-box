@@ -34,12 +34,6 @@ def cmd_run(args, config, cards) -> int:
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
     taplog = TapLog(config.taps_file)
     events = EventBus()
-    if config.web_enabled:
-        try:
-            start_web(taplog, cards, events, port=config.web_port)
-        except OSError as e:
-            # Never let the web page keep the music from working.
-            logging.error("web page disabled: cannot listen on port %d (%s)", config.web_port, e)
     chime, chime_seconds = None, 0.0
     if config.chime_file:
         try:
@@ -58,12 +52,20 @@ def cmd_run(args, config, cards) -> int:
         reader=Reader(timeout=config.read_timeout, serial_port=config.serial_port),
         player=Player(volume=config.volume, audio_device=config.audio_device,
                       chime=chime, chime_seconds=chime_seconds,
-                      play_seconds=config.play_seconds, mixer=mixer),
+                      play_seconds=config.play_seconds, mixer=mixer,
+                      ipc_dir=Path("~/.cache/musicbox").expanduser()),
         cards=cards,
         misses_to_remove=config.misses_to_remove,
         taplog=taplog,
         events=events,
     )
+    if config.web_enabled:
+        try:
+            start_web(taplog, cards, events, port=config.web_port, controller=box)
+        except OSError as e:
+            # Never let the web page keep the music from working.
+            logging.error("web page disabled: cannot listen on port %d (%s)", config.web_port, e)
+    box.publish_volume()  # starts at mixer_volume; web changes last until restart
     logging.info("music box ready: %d cards, music in %s", len(cards.all()), config.music_dir)
     box.run()
     return 0

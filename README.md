@@ -133,18 +133,25 @@ journalctl -u musicbox -f
 
 ## Web page
 
-While the service runs, open `http://<pi-address>:8080/` from any device on
-the same network (find the address with `hostname -I`). It has:
+While the service runs, open `http://<hostname>.local/` (for example
+`http://berry.local/`) from any device on the same network. If that name
+doesn't resolve on a device, use the Pi's address instead: `hostname -I`
+prints it. It has:
 
-- **Now playing:** the song on the reader, with a progress bar, or what
-  happened to the last tap (unknown card, file missing, blocked by the
-  volume check).
+- **Now playing:** the song on the reader, with pause/resume and a slider
+  to skip to any point, or what happened to the last tap (unknown card,
+  file missing, blocked by the volume check). Pause, resume and skip only
+  work on the song from the current tap while its card is on the reader;
+  the page can never start a song, and resuming re-checks the volume.
+- **Volume:** buttons for 0, 20, 40, 60, 80 and 100%. It applies at once
+  (0% also mutes), and the before/during-playback volume checks use the
+  level you pick. It goes back to `mixer_volume` when the box restarts.
 - **Cards:** change a card's song, remove it, or assign a new one. Tap a new
   card and press **Assign** next to it in the log.
 - **Card taps:** every tap, newest first.
 
 It updates live (Server-Sent Events from `/api/events`), with no refresh.
-There is no password, and nothing on the page can start a sound.
+There is no password.
 
 Taps are stored in `~/.local/share/musicbox/taps.db` (SQLite). Change the port
 or turn the page off with `web_port` / `web_enabled` in the config.

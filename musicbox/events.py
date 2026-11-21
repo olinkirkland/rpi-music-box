@@ -19,13 +19,20 @@ class EventBus:
         self._lock = threading.Lock()
         self._subscribers: set[queue.Queue] = set()
         self._max_queued = max_queued
-        self._now: dict = {"state": "idle"}
+        # The latest value of each "state" event, for pages that just connected.
+        self._latest: dict[str, dict] = {"now": {"state": "idle"}}
+
+    STATE_EVENTS = ("now", "volume")
 
     @property
     def now(self) -> dict:
-        """The latest "now playing" state, for pages that just connected."""
+        """The latest "now playing" state."""
+        return self.latest("now") or {"state": "idle"}
+
+    def latest(self, event: str) -> dict | None:
         with self._lock:
-            return dict(self._now)
+            value = self._latest.get(event)
+            return dict(value) if value is not None else None
 
     def subscribe(self) -> queue.Queue:
         q: queue.Queue = queue.Queue(maxsize=self._max_queued)
@@ -39,8 +46,8 @@ class EventBus:
 
     def publish(self, event: str, data) -> None:
         with self._lock:
-            if event == "now":
-                self._now = dict(data)
+            if event in self.STATE_EVENTS:
+                self._latest[event] = dict(data)
             subscribers = list(self._subscribers)
         for q in subscribers:
             try:

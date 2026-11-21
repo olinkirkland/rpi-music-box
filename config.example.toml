@@ -45,6 +45,8 @@ read_timeout = 0.2
 # Log of card taps, shown on the web page.
 taps_file = "~/.local/share/musicbox/taps.db"
 
-# Web page showing the tap log, at http://<pi-address>:<web_port>/
+# The web page, at http://<hostname>.local/ (e.g. http://berry.local/) or
+# http://<pi-address>/. Port 80 works under the systemd service, which is
+# allowed to use it; running `musicbox run` by hand needs a port above 1023.
 web_enabled = true
-web_port = 8080
+web_port = 80

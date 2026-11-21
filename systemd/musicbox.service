@@ -7,6 +7,9 @@ After=sound.target local-fs.target
 [Service]
 User=@USER@
 SupplementaryGroups=audio i2c gpio dialout
+# Lets the web page listen on port 80 (http://<hostname>.local/) without
+# running as root. This is the only extra permission the service gets.
+AmbientCapabilities=CAP_NET_BIND_SERVICE
 WorkingDirectory=@DIR@
 ExecStart=@DIR@/.venv/bin/musicbox run
 Restart=always

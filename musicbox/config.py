@@ -22,7 +22,7 @@ class Config:
     serial_port: str = ""
     taps_file: Path = Path("~/.local/share/musicbox/taps.db")
     web_enabled: bool = True
-    web_port: int = 8080
+    web_port: int = 80
     chime_volume: int = 25
     chime_file: str = ""
     play_seconds: float = 0

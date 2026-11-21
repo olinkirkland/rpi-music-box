@@ -13,8 +13,15 @@ CSS are vendored there, so there is no build step and no internet needed).
     GET    /api/tracks        audio files in music_dir
     PUT    /api/cards/<uid>   {"track": "<path relative to music_dir>"}
     DELETE /api/cards/<uid>
+    POST   /api/player/pause   {}
+    POST   /api/player/resume  {}
+    POST   /api/player/seek    {"position": <seconds into the song>}
+    GET    /api/volume         {level, steps, available}
+    POST   /api/volume         {"level": 0 | 20 | 40 | 60 | 80 | 100}
 
-Nothing here can start a sound: sound only ever follows a card tap.
+Nothing here can start a sound: a song only ever starts from a card tap.
+Pause/resume/seek only act on the song from the current tap while its
+card is on the reader (MusicBox.control enforces that).
 """
 
 from __future__ import annotations
@@ -28,6 +35,8 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
+
+from .player import ControlError
 
 log = logging.getLogger(__name__)
 
@@ -53,7 +62,7 @@ class ApiError(Exception):
         self.code = code
 
 
-def make_handler(taplog, cards, events=None):
+def make_handler(taplog, cards, events=None, controller=None):
     write_lock = threading.Lock()
 
     def now_state() -> dict:
@@ -73,6 +82,9 @@ def make_handler(taplog, cards, events=None):
 
         def do_DELETE(self) -> None:
             self._handle(self._delete)
+
+        def do_POST(self) -> None:
+            self._handle(self._post)
 
         def _handle(self, method) -> None:
             try:
@@ -95,6 +107,10 @@ def make_handler(taplog, cards, events=None):
                 self._event_stream()
             elif path == "/api/now":
                 self._json(200, now_state())
+            elif path == "/api/volume":
+                if controller is None:
+                    raise ApiError(503, "volume control is not available")
+                self._json(200, controller.volume_state())
             elif path == "/api/taps":
                 try:
                     limit = int(parse_qs(url.query).get("limit", ["500"])[0])
@@ -132,6 +148,44 @@ def make_handler(taplog, cards, events=None):
             self._cards_changed()
             self._json(200, {"uid": uid})
 
+        def _post(self, url) -> None:
+            if url.path == "/api/volume":
+                return self._post_volume()
+            prefix = "/api/player/"
+            if not url.path.startswith(prefix):
+                raise ApiError(404, "not found")
+            action = url.path[len(prefix):]
+            if action not in ("pause", "resume", "seek"):
+                raise ApiError(404, "not found")
+            self._check_write()
+            body = self._read_json()
+            if controller is None:
+                raise ApiError(503, "the player can't be controlled right now")
+            position = None
+            if action == "seek":
+                position = body.get("position") if isinstance(body, dict) else None
+                if isinstance(position, bool) or not isinstance(position, (int, float)) \
+                        or not 0 <= position < 24 * 3600:
+                    raise ApiError(400, "position must be a number of seconds")
+            try:
+                now = controller.control(action, position)
+            except ControlError as e:
+                raise ApiError(409, str(e)) from None
+            self._json(200, {**now, "server_time": time.time()})
+
+        def _post_volume(self) -> None:
+            self._check_write()
+            body = self._read_json()
+            if controller is None:
+                raise ApiError(503, "volume control is not available")
+            level = body.get("level") if isinstance(body, dict) else None
+            if isinstance(level, bool) or not isinstance(level, int):
+                raise ApiError(400, "level must be a whole number of percent")
+            try:
+                self._json(200, controller.set_volume(level))
+            except ControlError as e:
+                raise ApiError(400, str(e)) from None
+
         # --- live events ---------------------------------------------------
 
         def _event_stream(self) -> None:
@@ -145,6 +199,9 @@ def make_handler(taplog, cards, events=None):
             try:
                 # The current state first, so a page opened mid-song is right.
                 self._sse("now", now_state())
+                volume = events.latest("volume")
+                if volume is not None:
+                    self._sse("volume", volume)
                 while True:
                     try:
                         event, data = q.get(timeout=KEEPALIVE)
@@ -235,9 +292,9 @@ def make_handler(taplog, cards, events=None):
 
 
 def start_web(taplog, cards, events=None, host: str = "0.0.0.0",
-              port: int = 8080) -> ThreadingHTTPServer:
+              port: int = 80, controller=None) -> ThreadingHTTPServer:
     """Start serving in a daemon thread and return the server."""
-    server = ThreadingHTTPServer((host, port), make_handler(taplog, cards, events))
+    server = ThreadingHTTPServer((host, port), make_handler(taplog, cards, events, controller))
     server.daemon_threads = True
     threading.Thread(target=server.serve_forever, name="web", daemon=True).start()
     log.info("web page at http://%s:%d/", host, server.server_address[1])

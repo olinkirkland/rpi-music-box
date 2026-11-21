@@ -60,18 +60,37 @@
       <p class="now-hint">Place a card on the reader to play its song.</p>
     </template>
 
-    <template v-else-if="now.state === 'playing' || now.state === 'finished'">
+    <template v-else-if="now.state === 'playing' || now.state === 'paused' || now.state === 'finished'">
       <h2 class="now-title">{{ now.name }}</h2>
-      <template v-if="now.state === 'playing'">
-        <progress v-if="now.duration" :value="elapsed" :max="now.duration"></progress>
-        <progress v-else></progress>
-        <p class="now-time">
-          <span v-if="inChime">Chime&hellip;</span>
-          <span v-else>{{ clock(elapsed) }}</span>
-          <span v-if="now.duration"> / {{ clock(now.duration) }}</span>
-        </p>
-      </template>
-      <p v-else class="now-hint">Finished. Lift the card and put it back to hear it again.</p>
+      <div v-if="now.state !== 'finished'" class="player">
+        <button type="button" class="play-toggle" @click="togglePause"
+                :disabled="!canControl" :aria-label="now.state === 'paused' ? 'Resume' : 'Pause'"
+                :title="controlHint || (now.state === 'paused' ? 'Resume' : 'Pause')">
+          <svg v-if="now.state === 'paused'" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.4-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5z" fill="currentColor"></path>
+          </svg>
+          <svg v-else viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="6.5" y="5" width="4" height="14" rx="1" fill="currentColor"></rect>
+            <rect x="13.5" y="5" width="4" height="14" rx="1" fill="currentColor"></rect>
+          </svg>
+        </button>
+        <div class="scrub">
+          <input v-if="now.duration" type="range" min="0" :max="Math.floor(now.duration)" step="1"
+                 :value="Math.floor(shownPosition)" :disabled="!canControl"
+                 :style="{ '--fill': (100 * shownPosition / now.duration) + '%' }"
+                 @input="seekDraft = Number($event.target.value)"
+                 @change="commitSeek(Number($event.target.value))"
+                 aria-label="Position in the song">
+          <progress v-else></progress>
+          <p class="now-time">
+            <span v-if="inChime">Chime&hellip;</span>
+            <span v-else>{{ clock(shownPosition) }}</span>
+            <span v-if="now.duration">{{ clock(now.duration) }}</span>
+          </p>
+        </div>
+      </div>
+      <p v-if="now.state === 'finished'" class="now-hint">Finished. Lift the card and put it back to hear it again.</p>
+      <p v-else-if="now.state === 'paused'" class="now-hint small-hint">Paused. Lifting the card still stops it.</p>
     </template>
 
     <template v-else-if="now.state === 'waiting'">
@@ -94,6 +113,24 @@
       <h2 class="now-title">{{ now.name }}</h2>
       <p class="now-hint bad">Not played: the speaker volume couldn't be confirmed at a safe level. Check the speaker is plugged in.</p>
     </template>
+
+    <div v-if="volume.available" class="volume">
+      <span class="volume-label" id="volume-label">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor"></path>
+          <path v-if="volume.level === 0" d="M16 9.5l5 5M21 9.5l-5 5"></path>
+          <path v-if="volume.level > 0" d="M15.5 9a4 4 0 0 1 0 6"></path>
+          <path v-if="volume.level > 40" d="M18.5 6.5a7.5 7.5 0 0 1 0 11"></path>
+        </svg>
+        Volume
+      </span>
+      <div role="group" aria-labelledby="volume-label" class="volume-steps">
+        <button v-for="v in volume.steps" :key="v" type="button"
+                :class="{ on: v === volume.level }" :aria-pressed="v === volume.level"
+                :disabled="volumeBusy" @click="setVolume(v)">{{ v }}%</button>
+      </div>
+    </div>
   </article>
 
   <!-- Cards -->

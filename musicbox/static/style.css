@@ -30,6 +30,8 @@
   --mb-warn: #9a6100;
   --mb-bad: #b3261e;
   --mb-fresh: #dfeafd;
+  --mb-text: #1e2733;
+  --mb-control-bg: #ffffff;
   --pico-background-color: #f2f5f9;
   --pico-card-background-color: #ffffff;
   --pico-card-sectioning-background-color: #f8fafc;
@@ -63,6 +65,8 @@
   --mb-warn: #e0b04f;
   --mb-bad: #f08a80;
   --mb-fresh: #1f3354;
+  --mb-text: #dfe6ef;
+  --mb-control-bg: #111720;
   --pico-background-color: #0e131a;
   --pico-card-background-color: #161c25;
   --pico-card-sectioning-background-color: #1a212b;
@@ -172,7 +176,59 @@ button.link:hover { text-decoration: underline; }
 .uid { color: var(--pico-muted-color); }
 .now-title { margin: 0 0 0.6rem; font-size: 1.15rem; font-weight: 600; line-height: 1.3; word-break: break-word; }
 .muted-title { color: var(--pico-muted-color); }
-.now progress { margin: 0 0 0.3rem; height: 0.4rem; }
+.now progress { margin: 0.55rem 0 0.3rem; height: 0.4rem; }
+.now.now-paused { border-left-color: var(--mb-accent); }
+.pill.paused { background: var(--mb-accent-soft); color: var(--mb-accent); }
+
+/* Play/pause button and seek slider */
+.player { display: flex; align-items: center; gap: 0.85rem; margin-top: 0.15rem; }
+.play-toggle {
+  flex: none; display: inline-flex; align-items: center; justify-content: center;
+  width: 2.6rem; height: 2.6rem; padding: 0; margin: 0; border-radius: 50%;
+}
+.play-toggle svg { width: 1.15rem; height: 1.15rem; }
+.play-toggle:disabled { opacity: 0.45; }
+.scrub { flex: 1; min-width: 0; }
+.scrub .now-time { display: flex; justify-content: space-between; }
+.scrub input[type=range] {
+  margin: 0.55rem 0 0.25rem; height: 1.1rem; accent-color: var(--mb-accent);
+  --pico-range-active-color: var(--mb-accent);
+}
+.scrub input[type=range]:disabled { opacity: 0.55; }
+.small-hint { margin-top: 0.6rem; font-size: 0.82rem; }
+
+/* Volume button bar */
+.volume {
+  display: flex; align-items: center; gap: 0.85rem; flex-wrap: wrap;
+  margin-top: 1rem; padding-top: 0.85rem; border-top: 1px solid var(--pico-muted-border-color);
+}
+.volume-label {
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  font-size: 0.8rem; font-weight: 600; color: var(--pico-muted-color);
+  text-transform: uppercase; letter-spacing: 0.05em;
+}
+.volume-label svg { width: 1.15rem; height: 1.15rem; color: var(--mb-accent); flex: none; }
+.volume-steps { display: inline-flex; flex-wrap: nowrap; margin: 0; width: auto; }
+.volume-steps button {
+  /* Pico sets --pico-color to the white "on primary" colour inside buttons,
+     so use our own text colour for the unselected ones. */
+  margin: 0; height: 2rem; padding: 0 0.7rem; font-size: 0.82rem; font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  background: var(--mb-control-bg); color: var(--mb-text);
+  border: 1px solid var(--pico-form-element-border-color);
+  border-radius: 0; box-shadow: none;
+}
+.volume-steps button + button { border-left-width: 0; }
+.volume-steps button:first-child { border-radius: var(--pico-border-radius) 0 0 var(--pico-border-radius); }
+.volume-steps button:last-child { border-radius: 0 var(--pico-border-radius) var(--pico-border-radius) 0; }
+.volume-steps button:hover:not(.on) { background: var(--mb-accent-soft); color: var(--mb-text); }
+.volume-steps button.on { background: var(--mb-accent); border-color: var(--mb-accent); color: var(--pico-primary-inverse); font-weight: 600; }
+.volume-steps button.on + button { border-left-width: 0; }
+.volume-steps button:disabled { opacity: 0.6; }
+@media (max-width: 600px) {
+  .volume-steps { width: 100%; }
+  .volume-steps button { flex: 1; padding: 0; }
+}
 .now-time { margin: 0; font-variant-numeric: tabular-nums; color: var(--pico-muted-color); font-size: 0.8rem; }
 .now-hint { margin: 0 0 0.6rem; color: var(--pico-muted-color); font-size: 0.9rem; }
 .now-hint:last-child { margin-bottom: 0; }

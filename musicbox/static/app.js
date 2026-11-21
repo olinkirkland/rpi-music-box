@@ -9,6 +9,7 @@ const RESULT_LABELS = {
 const NOW_LABELS = {
   idle: "Idle",
   playing: "Playing",
+  paused: "Paused",
   finished: "Finished",
   waiting: "Card on reader",
   unknown: "Unknown card",
@@ -51,6 +52,10 @@ createApp({
       taps: [],
       freshTap: null,
       form: { uid: "", track: "" },
+      seekDraft: null, // slider position while it's being dragged
+      volume: { level: null, steps: [], available: false },
+      volumeBusy: false,
+      controlBusy: false,
       connection: "connecting",
       theme: document.documentElement.getAttribute("data-theme") || "light",
       toast: { text: "", kind: "", show: false },
@@ -71,9 +76,21 @@ createApp({
       return this.now.state === "playing" && this.serverNow < this.now.song_starts_at;
     },
     elapsed() {
+      if (this.now.state === "paused") return this.now.position || 0;
       if (this.now.state !== "playing") return 0;
       const e = Math.max(0, this.serverNow - this.now.song_starts_at);
       return this.now.duration ? Math.min(e, this.now.duration) : e;
+    },
+    shownPosition() {
+      return this.seekDraft !== null ? this.seekDraft : this.elapsed;
+    },
+    controlHint() {
+      if (!this.now.controls) return "Pause and seek aren't available";
+      if (this.inChime) return "Wait for the chime to finish";
+      return "";
+    },
+    canControl() {
+      return !this.controlBusy && !this.controlHint;
     },
     cardUids() {
       return new Set(this.cards.map((c) => c.uid));
@@ -155,6 +172,38 @@ createApp({
       }
       this.loadCards();
     },
+    async control(action, body = {}) {
+      this.controlBusy = true;
+      try {
+        this.setNow(await api("POST", "/api/player/" + action, body));
+      } catch (e) {
+        this.notify(e.message, "error");
+      } finally {
+        this.controlBusy = false;
+      }
+    },
+    togglePause() {
+      this.control(this.now.state === "paused" ? "resume" : "pause");
+    },
+    async commitSeek(position) {
+      await this.control("seek", { position });
+      this.seekDraft = null;
+    },
+
+    async setVolume(level) {
+      if (level === this.volume.level) return;
+      this.volumeBusy = true;
+      try {
+        const v = await api("POST", "/api/volume", { level });
+        this.volume = v;
+        if (!v.applied) this.notify("Volume set to " + level + "%. The speaker didn't confirm it yet; it's checked again before the next sound.", "error");
+      } catch (e) {
+        this.notify(e.message, "error");
+      } finally {
+        this.volumeBusy = false;
+      }
+    },
+
     prefill(uid) {
       this.form.uid = uid;
       const input = this.$refs.uidInput;
@@ -164,6 +213,8 @@ createApp({
 
     setNow(data) {
       this.clockOffset = data.server_time - Date.now() / 1000;
+      // A different song, or no song: drop any half-finished drag.
+      if (data.uid !== this.now.uid || data.track !== this.now.track) this.seekDraft = null;
       this.now = data;
     },
     addTap(row) {
@@ -187,6 +238,7 @@ createApp({
       source.addEventListener("now", (e) => this.setNow(JSON.parse(e.data)));
       source.addEventListener("tap", (e) => this.addTap(JSON.parse(e.data)));
       source.addEventListener("cards", () => this.loadCards());
+      source.addEventListener("volume", (e) => (this.volume = JSON.parse(e.data)));
     },
   },
 

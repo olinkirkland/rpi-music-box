@@ -185,3 +185,14 @@ def test_card_edits_are_announced(server):
                   data=b'{"track": "a.mp3"}', headers={"Content-Type": "application/json"})
     urlopen(req).close()
     assert q.get(timeout=2) == ("cards", {})
+
+
+def test_event_stream_snapshot_includes_volume(server):
+    bus, port = server
+    bus.publish("volume", {"level": 60, "steps": [0, 20], "available": True})
+    sock = socket.create_connection(("127.0.0.1", port))
+    sock.sendall(b"GET /api/events HTTP/1.1\r\nHost: x\r\n\r\n")
+    events = read_events(sock, 2)
+    sock.close()
+    assert [e for e, _ in events] == ["now", "volume"]
+    assert events[1][1]["level"] == 60

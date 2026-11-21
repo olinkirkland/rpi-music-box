@@ -31,6 +31,9 @@ class FakeMixer:
         self.sets += 1
         return self.ok
 
+    def set_level(self, level):
+        self.limit = level
+
     def current(self):
         return self.level
 
@@ -130,7 +133,7 @@ def test_mixer_reads_back_levels(monkeypatch):
     monkeypatch.setattr("musicbox.player.subprocess.run", run)
     m = Mixer("USB", 10)
     assert m.set_and_verify() is True
-    assert calls[0] == ["amixer", "-c", "USB", "-q", "sset", "PCM", "10%"]
+    assert calls[0] == ["amixer", "-c", "USB", "-q", "sset", "PCM", "10%", "unmute"]
     outputs["sget"] = "  Front Left: Playback 147 [100%] [on]\n"
     assert m.set_and_verify() is False
 
