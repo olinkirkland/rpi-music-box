@@ -134,15 +134,24 @@ class Player:
         # With play_seconds set, a pause would fight the hard time limit.
         return self.ipc_path is not None and not self.play_seconds
 
-    def play(self, track: Path) -> bool:
-        """Chime, then the track (cut off after play_seconds). False if refused."""
+    def play(self, tracks) -> bool:
+        """Chime, then the track(s) in order. False if refused.
+
+        `tracks` is one path or a list (a folder's files). With play_seconds
+        set, only the first track plays, cut off after that long.
+        """
+        files = list(tracks) if isinstance(tracks, (list, tuple)) else [tracks]
         self.stop()
-        if self.chime is None:
-            log.error("not playing %s: no chime to play first (check chime_file)", track)
+        if not files:
             return False
-        log.info("playing chime, then %s", track)
+        if self.chime is None:
+            log.error("not playing %s: no chime to play first (check chime_file)", files[0])
+            return False
+        if self.play_seconds:
+            files = files[:1]
+        log.info("playing chime, then %s", ", ".join(str(f) for f in files))
         limit = self.chime_seconds + self.play_seconds if self.play_seconds else None
-        return self._start([self.chime, track], limit)
+        return self._start([self.chime, *files], limit)
 
     def cue(self) -> None:
         """Stop, and play just the chime: a card was seen but has no song."""
@@ -216,14 +225,76 @@ class Player:
             self._ipc("seek", max(0.0, float(seconds)), "absolute")
             return float(self._ipc("get_property", "time-pos") or 0.0)
 
+    # mpv's playlist is [chime, track, track, ...]; "queue index" below counts
+    # the tracks only, so 0 is the first track after the chime.
+
+    def next_track(self) -> bool:
+        """Skip to the next queued track. False if this is the last one."""
+        with self._lock:
+            self._require_song()
+            pos, count = self._ipc("get_property", "playlist-pos"), self._ipc("get_property", "playlist-count")
+            if pos >= count - 1:
+                return False
+            self._ipc("playlist-next", "force")
+            return True
+
+    def previous_track(self) -> int:
+        """Back to the previous track, or to the start of this one if it has
+        played a few seconds (or is the first). Returns the new queue index."""
+        with self._lock:
+            self._require_song()
+            pos = self._ipc("get_property", "playlist-pos")
+            played = float(self._ipc("get_property", "time-pos") or 0.0)
+            if played > 3.0 or pos <= 1:  # never back into the chime
+                self._ipc("seek", 0, "absolute")
+                return pos - 1
+            self._ipc("playlist-prev", "force")
+            return pos - 2
+
+    def replace_upcoming(self, tracks) -> None:
+        """Make `tracks` the ones that play after the current track."""
+        with self._lock:
+            if not self.controllable or not self.playing:
+                raise ControlError("nothing is playing")
+            pos, count = self._ipc("get_property", "playlist-pos"), self._ipc("get_property", "playlist-count")
+            if not isinstance(pos, int) or pos < 0:
+                raise ControlError("the player isn't ready yet")
+            for index in range(count - 1, pos, -1):
+                self._ipc("playlist-remove", index)
+            for track in tracks:
+                self._ipc("loadfile", str(track), "append")
+
+    def append_tracks(self, tracks) -> None:
+        """Queue `tracks` after everything already queued (the next round)."""
+        with self._lock:
+            if not self.controllable or not self.playing:
+                raise ControlError("nothing is playing")
+            for track in tracks:
+                self._ipc("loadfile", str(track), "append")
+
+    def playlist_state(self) -> tuple[int, float] | None:
+        """(index of the track playing, 0 = the first after the chime; seconds
+        into it), or None during the chime or if it can't be read."""
+        with self._lock:
+            if not self.controllable or not self.playing:
+                return None
+            try:
+                pos = self._ipc("get_property", "playlist-pos")
+                if not isinstance(pos, int) or pos < 1:
+                    return None
+                return pos - 1, float(self._ipc("get_property", "time-pos") or 0.0)
+            except ControlError:
+                return None
+
     def _require_song(self) -> None:
         if not self.controllable:
             raise ControlError("pause and seek are not available with this setup"
                                + (" (play_seconds is set)" if self.play_seconds else ""))
         if not self.playing:
             raise ControlError("nothing is playing")
-        # The playlist is [chime, song]; index 1 is the song.
-        if self._ipc("get_property", "playlist-pos") != 1:
+        # The playlist is [chime, track, track, ...]; index 0 is the chime.
+        pos = self._ipc("get_property", "playlist-pos")
+        if not isinstance(pos, int) or pos < 1:
             raise ControlError("wait for the chime to finish")
 
     def _ipc(self, *command):

@@ -239,10 +239,11 @@ def test_duration_still_arrives_after_a_pause(tmp_path):
         return 123.0
 
     box.duration_of = slow
-    box._look_up_duration(tmp_path / "music" / "song.mp3")
+    song = tmp_path / "music" / "song.mp3"
+    box._look_up_info([song])
     box.control("pause")
     gate.set()
-    for _ in range(100):
+    for _ in range(500):  # the info thread also runs ffprobe, slow on a Pi 3
         if box.now.get("duration") == 123.0:
             break
         threading.Event().wait(0.01)

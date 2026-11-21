@@ -60,3 +60,23 @@ class TapLog:
         finally:
             db.close()
         return [dict(r) for r in rows]
+
+    def search(self, query: str = "", limit: int = 100, offset: int = 0) -> tuple[list[dict], int]:
+        """Newest first, matching `query` in the card ID, track or result.
+        Returns (rows, total matches)."""
+        where, args = "", []
+        query = (query or "").strip()
+        if query:
+            like = "%" + query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+            where = " WHERE uid LIKE ? ESCAPE '\\' OR track LIKE ? ESCAPE '\\' OR result LIKE ? ESCAPE '\\'"
+            args = [like, like, like]
+        db = self._connect()
+        try:
+            total = db.execute("SELECT COUNT(*) FROM taps" + where, args).fetchone()[0]
+            rows = db.execute(
+                "SELECT id, time, uid, track, result FROM taps" + where + " ORDER BY id DESC LIMIT ? OFFSET ?",
+                [*args, limit, offset],
+            ).fetchall()
+        finally:
+            db.close()
+        return [dict(r) for r in rows], total

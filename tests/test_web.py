@@ -32,7 +32,8 @@ def test_page_has_title(server):
     _, base = server
     with urlopen(base + "/") as r:
         assert r.headers["Content-Type"].startswith("text/html")
-        assert "Olin's Music Box" in r.read().decode()
+        page = r.read().decode()
+    assert "<title>Tap to Play</title>" in page and "<app-logo>" in page
 
 
 def test_api_returns_taps_newest_first(server):
@@ -75,7 +76,10 @@ def test_assign_change_and_remove_card(server, cards):
     assert cards.all() == {"04aabb": "b.mp3"}
     call(base, "PUT", "/api/cards/04aabb", {"track": "album/a.MP3"})
     assert call(base, "GET", "/api/cards") == (
-        200, [{"uid": "04aabb", "track": "album/a.MP3", "missing": False}])
+        200, [{"uid": "04aabb", "tracks": ["album/a.MP3"], "track": "album/a.MP3",
+               "missing": False, "missing_count": 0, "kind": "file", "name": "a", "artist": None,
+               "parts": 1, "tag_name": "a", "custom_name": None, "shuffle": False, "repeat": False,
+               "art_version": None}])
     assert call(base, "DELETE", "/api/cards/04aabb")[0] == 200
     assert cards.all() == {}
     assert call(base, "DELETE", "/api/cards/04aabb")[0] == 404
