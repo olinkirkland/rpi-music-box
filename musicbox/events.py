@@ -22,7 +22,7 @@ class EventBus:
         # The latest value of each "state" event, for pages that just connected.
         self._latest: dict[str, dict] = {"now": {"state": "idle"}}
 
-    STATE_EVENTS = ("now", "volume")
+    STATE_EVENTS = ("now", "volume", "wifi")
 
     @property
     def now(self) -> dict:

@@ -21,6 +21,8 @@ from .chime import prepare_chime
 from .cards import CardStore
 from .config import DEFAULT_CONFIG_PATH, load_config
 from .files import FileManager
+from .positions import PositionStore
+from .wifi import WifiClient, WifiWatcher
 from .events import EventBus
 from .player import Mixer, Player
 from .reader import Reader
@@ -100,16 +102,19 @@ def cmd_run(args, config, cards) -> int:
         misses_to_remove=config.misses_to_remove,
         taplog=taplog,
         events=events,
+        positions=PositionStore(Path("~/.local/share/musicbox/positions.json").expanduser()),
     )
     if config.web_enabled:
         try:
+            wifi = WifiWatcher(WifiClient(), events)
+            wifi.start()
             art_dir = Path("~/.local/share/musicbox/art").expanduser()
             cache_dir = Path("~/.cache/musicbox").expanduser()
             start_web(taplog, cards, events, port=config.web_port, controller=box,
                       cover_dir=cache_dir / "covers", art=ArtStore(art_dir),
                       musicbrainz=MusicBrainz(cache_dir / "musicbrainz"),
                       files=FileManager(config.music_dir, cards),
-                      paths=_where_things_live(args, config, art_dir, cache_dir))
+                      paths=_where_things_live(args, config, art_dir, cache_dir), wifi=wifi)
             # Read every file's tags once in the background, so the first
             # page load doesn't wait for ffprobe on the whole library.
             threading.Thread(target=library, args=(cards,), name="warm-tags", daemon=True).start()

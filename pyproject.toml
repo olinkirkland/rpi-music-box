@@ -17,6 +17,7 @@ dev = ["pytest"]
 
 [project.scripts]
 musicbox = "musicbox.cli:main"
+tap-to-play-wifi = "musicbox.wifi:main"
 
 [tool.setuptools]
 packages = ["musicbox"]

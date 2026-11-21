@@ -5,10 +5,12 @@ list of audio files (paths relative to the music directory). In the file:
 
     "04a1b2c3": "Song.mp3"                     one track, no settings
     "04d5e6f7": {"tracks": ["a.mp3", "b.mp3"],  several tracks and/or settings
-                 "name": "Bedtime", "shuffle": false, "repeat": true}
+                 "name": "Bedtime", "shuffle": false, "repeat": true,
+                 "remember_playback": true}
 
 A custom name only changes what the page shows; files are never touched.
-Shuffle and repeat are saved per card.
+Shuffle, repeat and remember_playback (resume where it left off) are saved
+per card; the remembered position itself lives in positions.py's file.
 
 Older files used {"track": <path>} and could point at a folder. Those load
 as a list of the folder's files in name order; `migrate()` saves them in
@@ -27,6 +29,7 @@ AUDIO_EXTENSIONS = {".mp3", ".m4a", ".aac", ".flac", ".ogg", ".oga", ".opus", ".
 MAX_NAME = 80
 MAX_TRACKS = 500
 _KEEP = object()  # assign(): leave this setting as it is
+FLAGS = ("shuffle", "repeat", "remember_playback")  # per-card on/off settings, off by default
 
 
 def clean_name(name) -> str | None:
@@ -80,7 +83,7 @@ class CardStore:
         entry = {"tracks": tracks}
         if isinstance(value.get("name"), str) and value["name"].strip():
             entry["name"] = value["name"].strip()
-        for flag in ("shuffle", "repeat"):
+        for flag in FLAGS:
             if value.get(flag) is True:
                 entry[flag] = True
         return entry
@@ -136,7 +139,7 @@ class CardStore:
 
     def settings(self, uid: str) -> dict:
         e = self._load().get(uid, {})
-        return {"shuffle": bool(e.get("shuffle")), "repeat": bool(e.get("repeat"))}
+        return {flag: bool(e.get(flag)) for flag in FLAGS}
 
     # --- the music folder --------------------------------------------------------
 
@@ -223,7 +226,8 @@ class CardStore:
 
     # --- changing ----------------------------------------------------------------
 
-    def assign(self, uid: str, tracks, name=_KEEP, shuffle=_KEEP, repeat=_KEEP) -> list[str]:
+    def assign(self, uid: str, tracks, name=_KEEP, shuffle=_KEEP, repeat=_KEEP,
+               remember_playback=_KEEP) -> list[str]:
         """Set what `uid` plays: one path or a list, in order (a folder adds its
         files). `name`: a new custom name, None to clear it, or leave it out to
         keep it (different tracks drop it, since the old name would no longer
@@ -239,7 +243,8 @@ class CardStore:
             cleaned = clean_name(name)
             if cleaned:
                 entry["name"] = cleaned
-        for flag, value in (("shuffle", shuffle), ("repeat", repeat)):
+        for flag, value in (("shuffle", shuffle), ("repeat", repeat),
+                            ("remember_playback", remember_playback)):
             on = old.get(flag, False) if value is _KEEP else bool(value)
             if on:
                 entry[flag] = True
@@ -259,19 +264,20 @@ class CardStore:
         self._save(cards)
         return cleaned
 
-    def set_settings(self, uid: str, shuffle=None, repeat=None) -> dict:
-        """Change a card's saved shuffle/repeat (None leaves one as it is)."""
+    def set_settings(self, uid: str, shuffle=None, repeat=None, remember_playback=None) -> dict:
+        """Change a card's saved settings (None leaves one as it is)."""
         cards = self.entries()
         if uid not in cards:
             raise KeyError(uid)
-        for flag, value in (("shuffle", shuffle), ("repeat", repeat)):
+        for flag, value in (("shuffle", shuffle), ("repeat", repeat),
+                            ("remember_playback", remember_playback)):
             if value is None:
                 continue
             cards[uid].pop(flag, None)
             if value:
                 cards[uid][flag] = True
         self._save(cards)
-        return {"shuffle": bool(cards[uid].get("shuffle")), "repeat": bool(cards[uid].get("repeat"))}
+        return {flag: bool(cards[uid].get(flag)) for flag in FLAGS}
 
     # --- keeping cards in step with the music folder (file manager) ---------------
 
@@ -332,7 +338,7 @@ class CardStore:
         # stays easy to read and edit by hand.
         out = {}
         for uid, e in cards.items():
-            simple = len(e["tracks"]) == 1 and not (e.get("name") or e.get("shuffle") or e.get("repeat"))
+            simple = len(e["tracks"]) == 1 and not (e.get("name") or any(e.get(f) for f in FLAGS))
             out[uid] = e["tracks"][0] if simple else e
         self.cards_file.parent.mkdir(parents=True, exist_ok=True)
         tmp = self.cards_file.with_suffix(".tmp")

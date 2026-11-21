@@ -225,6 +225,42 @@ const PlaybackControls = {
     </div>`,
 };
 
+// A card's saved settings, as checkboxes: Shuffle, Repeat, Remember playback.
+const CardOptions = {
+  props: {
+    trackCount: { type: Number, default: 0 },
+    shuffle: Boolean,
+    repeat: Boolean,
+    rememberPlayback: Boolean,
+  },
+  emits: ["update:shuffle", "update:repeat", "update:rememberPlayback"],
+  computed: {
+    options() {
+      const one = this.trackCount < 2;
+      return [
+        { key: "shuffle", name: "Shuffle", on: this.shuffle && !one, disabled: one,
+          text: one ? "Needs 2 or more tracks." : "Play the tracks in a random order." },
+        { key: "repeat", name: "Repeat", on: this.repeat, disabled: false,
+          text: "Start over when every track has played." },
+        { key: "rememberPlayback", name: "Remember playback", on: this.rememberPlayback, disabled: false,
+          text: "The next tap carries on where it left off." },
+      ];
+    },
+  },
+  // Each option is a card you click as a whole; the checkbox shows its state.
+  template: `
+    <div class="card-options">
+      <label v-for="o in options" :key="o.key" class="option-card" :class="{ on: o.on, disabled: o.disabled }">
+        <span class="oc-head">
+          <input type="checkbox" :checked="o.on" :disabled="o.disabled"
+                 @change="$emit('update:' + o.key, $event.target.checked)">
+          <strong>{{ o.name }}</strong>
+        </span>
+        <span class="oc-text">{{ o.text }}</span>
+      </label>
+    </div>`,
+};
+
 // The volume button bar (tile and Play Mode).
 const VolumeBar = {
   props: { volume: { type: Object, required: true }, busy: Boolean },
@@ -271,14 +307,20 @@ const app = createApp({
             loading: false, busy: false, error: "", renaming: null, renameTo: "", renameExt: "",
             uploads: [], dragging: false, dragDepth: 0, dropTop: 0, dropHeight: 0 },
       newFolder: { open: false, name: "", busy: false, error: "" },
+      wifi: { mode: "unavailable", saved: [], log: [] },
+      settings: { open: false, ssid: "", password: "", inRange: [], scanning: false, busy: false, error: "" },
+      setup: { open: false, choice: "", ssid: "", password: "", inRange: [], busy: false, error: "",
+               done: false, joined: "" },
       allTaps: { open: false, query: "", page: 1, pages: 1, total: 0, rows: [], busy: false, error: "" },
       controlBusy: false,
       edit: { open: false, orig: null, uid: "", name: "", nameBase: "", tracks: [], shuffle: false, repeat: false,
+              remember: false, artPending: null,
               art_version: null, busy: false, error: "" },
       artBusy: false,
       artError: "",
       artSearch: { open: false, q: "", artist: "", busy: false, searched: false, results: [] },
-      assign: { open: false, uid: "", tracks: [], busy: false, error: "" },
+      assign: { open: false, uid: "", tracks: [], shuffle: false, repeat: false, remember: false,
+                busy: false, error: "" },
       connection: "connecting",
       theme: document.documentElement.getAttribute("data-theme") || "light",
       toast: { text: "", kind: "", show: false },
@@ -349,6 +391,12 @@ const app = createApp({
       // The tag name for whatever is picked now (it may differ from the card's).
       return this.edit.tracks.length ? this.selectionName(this.edit.tracks) : this.edit.orig?.tag_name || "";
     },
+    setupSsid() {
+      return (this.setup.choice === "__other" ? this.setup.ssid : this.setup.choice).trim();
+    },
+    setupErrors() {
+      return (this.wifi.log || []).filter((e) => e.level === "error");
+    },
     editNameTouched() {
       // Typed in: differs from what the field opened with (or was set to by the box).
       return this.editName !== this.edit.nameBase;
@@ -366,13 +414,26 @@ const app = createApp({
     },
     editArtDropped() {
       const o = this.edit.orig;
-      return !!o && !!this.edit.art_version && !sameList(this.edit.tracks, o.tracks);
+      return !!o && !!this.edit.art_version && !this.edit.artPending && !sameList(this.edit.tracks, o.tracks);
+    },
+    editHasOwnArt() {
+      const p = this.edit.artPending;
+      return p ? p.kind !== "remove" : !!this.edit.art_version;
+    },
+    artPendingText() {
+      const p = this.edit.artPending;
+      if (!p) return "";
+      return { upload: "the uploaded image", musicbrainz: "the cover from MusicBrainz",
+               remove: "back to the music files' artwork" }[p.kind] + " is applied when you press Save.";
     },
     editArtKey() {
       return this.edit.art_version ? "card:" + this.edit.orig.uid + ":" + this.edit.art_version : this.edit.orig?.track;
     },
     editArtUrl() {
       const o = this.edit.orig;
+      const p = this.edit.artPending;
+      if (p && p.url) return p.url; // a preview of what Save will apply
+      if (p && p.kind === "remove") return o && !this.noCover[o.track] ? this.coverFor(o.track) : "";
       if (!o || this.noCover[this.editArtKey]) return "";
       return this.edit.art_version ? this.cardArtUrl({ ...o, art_version: this.edit.art_version }) : this.coverFor(o.track);
     },
@@ -380,6 +441,7 @@ const app = createApp({
       const o = this.edit.orig;
       return !!o && (this.edit.uid.toLowerCase() !== o.uid || !sameList(this.edit.tracks, o.tracks)
         || this.edit.shuffle !== o.shuffle || this.edit.repeat !== o.repeat
+        || this.edit.remember !== o.remember_playback || !!this.edit.artPending
         || this.editNameToSave !== (o.custom_name || ""));
     },
 
@@ -783,6 +845,7 @@ const app = createApp({
       const shown = card.custom_name || card.tag_name || "";
       this.edit = { open: true, orig: { ...card }, uid: card.uid, name: shown, nameBase: shown,
                     tracks: [...card.tracks], shuffle: card.shuffle, repeat: card.repeat,
+                    remember: card.remember_playback, artPending: null,
                     art_version: card.art_version, busy: false, error: "" };
       this.artError = "";
       this.artSearch = { open: false, q: card.name, artist: card.artist || "", busy: false, searched: false, results: [] };
@@ -795,6 +858,7 @@ const app = createApp({
     },
     closeEdit() {
       if (this.edit.busy) return;
+      this.dropArtPending(); // Cancel/X: nothing pending is applied
       this.$refs.editDialog.close();
       this.edit.open = false;
     },
@@ -808,13 +872,16 @@ const app = createApp({
           await api("POST", "/api/cards/" + encodeURIComponent(o.uid) + "/rename", { uid });
         }
         if (!sameList(this.edit.tracks, o.tracks) || this.editNameToSave !== (o.custom_name || "")
-            || this.edit.shuffle !== o.shuffle || this.edit.repeat !== o.repeat) {
+            || this.edit.shuffle !== o.shuffle || this.edit.repeat !== o.repeat
+            || this.edit.remember !== o.remember_playback) {
           const name = this.editNameToSave;
           await api("PUT", "/api/cards/" + encodeURIComponent(uid), {
             tracks: this.edit.tracks, name, shuffle: this.edit.shuffle && this.edit.tracks.length > 1,
-            repeat: this.edit.repeat,
+            repeat: this.edit.repeat, remember_playback: this.edit.remember,
           });
         }
+        // Artwork last: changed tracks drop the old artwork on the box first.
+        await this.applyArtPending(uid);
         this.edit.busy = false;
         this.closeEdit();
         this.notify("Card saved");
@@ -824,28 +891,26 @@ const app = createApp({
       }
       this.loadCards();
     },
-    // --- Artwork (saves right away) -----------------------------------------
-    artPath() {
-      return "/api/cards/" + encodeURIComponent(this.edit.orig.uid) + "/art";
+    // --- Artwork (applied when the card is saved) -----------------------------
+    artPath(uid) {
+      return "/api/cards/" + encodeURIComponent(uid) + "/art";
     },
-    async uploadArt(event) {
+    dropArtPending() {
+      const p = this.edit.artPending;
+      if (p && p.kind === "upload") URL.revokeObjectURL(p.url);
+      this.edit.artPending = null;
+    },
+    uploadArt(event) {
       const file = event.target.files[0];
-      event.target.value = ""; // so picking the same file again still uploads
+      event.target.value = ""; // so picking the same file again works
       if (!file) return;
-      this.artBusy = true;
       this.artError = "";
-      try {
-        const res = await fetch(this.artPath(), {
-          method: "PUT", body: file, headers: { "Content-Type": file.type || "image/jpeg" },
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error || "HTTP " + res.status);
-        this.edit.art_version = data.art_version;
-      } catch (e) {
-        this.artError = "Upload failed: " + e.message;
-      } finally {
-        this.artBusy = false;
+      if (file.size > 15 * 1024 * 1024) {
+        this.artError = "That image is larger than 15 MB.";
+        return;
       }
+      this.dropArtPending();
+      this.edit.artPending = { kind: "upload", file, url: URL.createObjectURL(file) };
     },
     toggleArtSearch() {
       this.artSearch.open = !this.artSearch.open;
@@ -867,30 +932,34 @@ const app = createApp({
         this.artSearch.searched = true;
       }
     },
-    async pickArt(result) {
-      this.artBusy = true;
+    pickArt(result) {
       this.artError = "";
-      try {
-        const data = await api("POST", this.artPath() + "/musicbrainz", { id: result.id });
-        this.edit.art_version = data.art_version;
-        this.artSearch.open = false;
-      } catch (e) {
-        this.artError = e.message;
-      } finally {
-        this.artBusy = false;
-      }
+      this.dropArtPending();
+      this.edit.artPending = { kind: "musicbrainz", id: result.id, url: "/api/artwork/thumb/" + result.id };
+      this.artSearch.open = false;
     },
-    async removeArt() {
-      this.artBusy = true;
+    removeArt() {
       this.artError = "";
-      try {
-        await api("DELETE", this.artPath());
-        this.edit.art_version = null;
-      } catch (e) {
-        this.artError = e.message;
-      } finally {
-        this.artBusy = false;
+      const p = this.edit.artPending;
+      this.dropArtPending();
+      // Removing a not-yet-saved image just drops it; otherwise remove the card's own.
+      if (!(p && p.kind !== "remove") && this.edit.art_version) this.edit.artPending = { kind: "remove" };
+    },
+    async applyArtPending(uid) {
+      const p = this.edit.artPending;
+      if (!p) return;
+      if (p.kind === "upload") {
+        const res = await fetch(this.artPath(uid), {
+          method: "PUT", body: p.file, headers: { "Content-Type": p.file.type || "image/jpeg" },
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error("Artwork: " + (data.error || "HTTP " + res.status));
+      } else if (p.kind === "musicbrainz") {
+        await api("POST", this.artPath(uid) + "/musicbrainz", { id: p.id });
+      } else if (p.kind === "remove") {
+        await api("DELETE", this.artPath(uid)).catch(() => {}); // already gone is fine
       }
+      this.dropArtPending();
     },
 
     async removeEditing() {
@@ -911,7 +980,8 @@ const app = createApp({
 
     // --- Assign new card ---------------------------------------------------
     async openAssign(uid = "") {
-      this.assign = { open: true, uid, tracks: [], busy: false, error: "" };
+      this.assign = { open: true, uid, tracks: [], shuffle: false, repeat: false, remember: false,
+                      busy: false, error: "" };
       this.$nextTick(() => this.$refs.assignDialog.showModal());
       await this.renewAssigning();
       clearInterval(this._assignTimer);
@@ -944,7 +1014,10 @@ const app = createApp({
       this.assign.busy = true;
       this.assign.error = "";
       try {
-        await api("PUT", "/api/cards/" + encodeURIComponent(uid), { tracks });
+        await api("PUT", "/api/cards/" + encodeURIComponent(uid), {
+          tracks, shuffle: this.assign.shuffle && tracks.length > 1, repeat: this.assign.repeat,
+          remember_playback: this.assign.remember,
+        });
         this.assign.busy = false;
         this.closeAssign();
         this.notify(verb + " card " + uid + " → " + this.selectionName(tracks));
@@ -970,10 +1043,97 @@ const app = createApp({
     // closes one on a repeated Escape; if a dialog closes while its window is
     // meant to be open, open it again.
     keepOpen(ref) {
-      const open = { filesDialog: this.fm.open, folderDialog: this.newFolder.open, tapsDialog: this.allTaps.open,
+      const open = { settingsDialog: this.settings.open, setupDialog: this.setup.open, filesDialog: this.fm.open, folderDialog: this.newFolder.open, tapsDialog: this.allTaps.open,
                      editDialog: this.edit.open, assignDialog: this.assign.open }[ref];
       const el = this.$refs[ref];
       if (open && el && !el.open) el.showModal();
+    },
+
+    // --- Settings -------------------------------------------------------------
+    setTheme(theme) {
+      if (theme === this.theme) return;
+      this.applyTheme(theme);
+      try {
+        localStorage.setItem(THEME_KEY, theme);
+      } catch {
+        // storage blocked: still applies for this visit
+      }
+    },
+    openSettings() {
+      this.settings = { ...this.settings, open: true, error: "", busy: false };
+      this.$nextTick(() => this.$refs.settingsDialog.showModal());
+      api("GET", "/api/wifi").then((w) => (this.wifi = w)).catch(() => {});
+    },
+    closeSettings() {
+      this.$refs.settingsDialog.close();
+      this.settings.open = false;
+    },
+    async scanWifi() {
+      this.settings.scanning = true;
+      this.settings.error = "";
+      try {
+        this.settings.inRange = (await api("POST", "/api/wifi/scan", {})).networks;
+      } catch (e) {
+        this.settings.error = e.message;
+      } finally {
+        this.settings.scanning = false;
+      }
+    },
+    async addWifi() {
+      this.settings.busy = true;
+      this.settings.error = "";
+      try {
+        this.wifi = await api("POST", "/api/wifi/networks",
+                              { ssid: this.settings.ssid.trim(), password: this.settings.password });
+        this.notify("Saved " + this.settings.ssid.trim());
+        this.settings.ssid = "";
+        this.settings.password = "";
+      } catch (e) {
+        this.settings.error = e.message;
+      } finally {
+        this.settings.busy = false;
+      }
+    },
+    async removeWifi(net) {
+      if (!confirm("Remove the saved network " + net.ssid + "?")) return;
+      this.settings.busy = true;
+      this.settings.error = "";
+      try {
+        this.wifi = await api("DELETE", "/api/wifi/networks?" + new URLSearchParams({ uuid: net.uuid }));
+      } catch (e) {
+        this.settings.error = e.message;
+      } finally {
+        this.settings.busy = false;
+      }
+    },
+
+    // --- Wi-Fi setup (the box is hosting "Tap to Play Setup") -------------------
+    setWifi(status) {
+      this.wifi = status;
+      if (status.mode === "setup" && !this.setup.open) this.openSetup();
+    },
+    async openSetup() {
+      this.setup = { ...this.setup, open: true, error: "", done: false };
+      this.$nextTick(() => this.$refs.setupDialog.showModal());
+      try {
+        this.setup.inRange = (await api("POST", "/api/wifi/scan", {})).networks;
+      } catch {
+        this.setup.inRange = [];
+      }
+    },
+    async submitSetup() {
+      const ssid = this.setupSsid;
+      this.setup.busy = true;
+      this.setup.error = "";
+      try {
+        await api("POST", "/api/wifi/setup", { ssid, password: this.setup.password });
+        this.setup.done = true;
+        this.setup.joined = ssid;
+      } catch (e) {
+        this.setup.error = e.message;
+      } finally {
+        this.setup.busy = false;
+      }
     },
 
     // --- Play Mode ------------------------------------------------------------
@@ -1053,6 +1213,7 @@ const app = createApp({
       source.addEventListener("tap", (e) => this.addTap(JSON.parse(e.data)));
       source.addEventListener("cards", () => this.loadCards());
       source.addEventListener("volume", (e) => (this.volume = JSON.parse(e.data)));
+      source.addEventListener("wifi", (e) => this.setWifi(JSON.parse(e.data)));
       source.addEventListener("assign_tap", (e) => this.onAssignTap(JSON.parse(e.data)));
     },
   },
@@ -1105,4 +1266,5 @@ app.component("app-logo", AppLogo);
 app.component("track-picker", TrackPicker);
 app.component("playback-controls", PlaybackControls);
 app.component("volume-bar", VolumeBar);
+app.component("card-options", CardOptions);
 app.mount("#app");

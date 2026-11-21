@@ -14,7 +14,7 @@ CSS are vendored there, so there is no build step and no internet needed).
     GET    /api/tracks        audio files in music_dir
     GET    /api/library       [{path, kind: "file", name, artist, album, parts}]
     GET    /api/cover?path=P  cover art for a file or folder in the library
-    PUT    /api/cards/<uid>   {"tracks": ["<path>", ...], "name"?, "shuffle"?, "repeat"?}
+    PUT    /api/cards/<uid>   {"tracks": [...], "name"?, "shuffle"?, "repeat"?, "remember_playback"?}
     DELETE /api/cards/<uid>
     POST   /api/player/pause   {}
     POST   /api/player/resume  {}
@@ -38,6 +38,11 @@ CSS are vendored there, so there is no build step and no internet needed).
     POST   /api/files/rename   {"path": <file or folder>, "name": <new name>}
     DELETE /api/files?path=P   a file, or an empty folder
     GET    /api/paths          where things live on the Pi (for troubleshooting)
+    GET    /api/wifi           Wi-Fi status: mode, connection, saved networks, log
+    POST   /api/wifi/scan      networks in range
+    POST   /api/wifi/networks  {"ssid", "password", "hidden"?}: save a network
+    DELETE /api/wifi/networks?uuid=U
+    POST   /api/wifi/setup     {"ssid", "password"}: setup mode only; saves and restarts
     GET    /api/volume         {level, steps, available}
     POST   /api/volume         {"level": 0 | 20 | 40 | 60 | 80 | 100}
 
@@ -61,6 +66,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 from .artwork import MBID_RE, MAX_UPLOAD, ArtworkError
 from .cards import MAX_TRACKS, clean_name
 from .files import FileError
+from .wifi import HOTSPOT_ADDRESS, WifiError
 from .media import cover_art, describe_tracks, track_info
 from .player import ControlError
 
@@ -100,7 +106,7 @@ def library(cards) -> list[dict]:
 
 
 def make_handler(taplog, cards, events=None, controller=None, cover_dir=None,
-                 art=None, musicbrainz=None, files=None, paths=None):
+                 art=None, musicbrainz=None, files=None, paths=None, wifi=None):
     write_lock = threading.Lock()
     ART_SUB = "/art"
 
@@ -136,6 +142,8 @@ def make_handler(taplog, cards, events=None, controller=None, cover_dir=None,
                 self._json(e.code, {"error": str(e)})
             except FileError as e:
                 self._json(e.code, {"error": str(e)})
+            except WifiError as e:
+                self._json(400, {"error": str(e)})
             except (BrokenPipeError, ConnectionResetError):
                 pass  # the browser went away
             except Exception:
@@ -144,6 +152,8 @@ def make_handler(taplog, cards, events=None, controller=None, cover_dir=None,
 
         def _get(self, url) -> None:
             path = url.path
+            if self._captive_redirect(path):
+                return
             if path == "/":
                 self._static("index.html")
             elif path == "/favicon.ico":  # asked for by some browsers whatever the page says
@@ -190,6 +200,8 @@ def make_handler(taplog, cards, events=None, controller=None, cover_dir=None,
                 self._send(200, "image/jpeg", art.path(uid).read_bytes(), "private, max-age=31536000")
             elif path == "/api/files":
                 self._json(200, self._files().list(parse_qs(url.query).get("path", [""])[0]))
+            elif path == "/api/wifi":
+                self._json(200, self._wifi().refresh())
             elif path == "/api/paths":
                 self._json(200, paths or {})
             elif path == "/api/artwork/search":
@@ -228,7 +240,7 @@ def make_handler(taplog, cards, events=None, controller=None, cover_dir=None,
                     kwargs["name"] = clean_name(body["name"])
                 except ValueError as e:
                     raise ApiError(400, str(e)) from None
-            for flag in ("shuffle", "repeat"):
+            for flag in ("shuffle", "repeat", "remember_playback"):
                 if flag in body:
                     if not isinstance(body[flag], bool):
                         raise ApiError(400, f"{flag} must be true or false")
@@ -236,6 +248,9 @@ def make_handler(taplog, cards, events=None, controller=None, cover_dir=None,
             with write_lock:
                 previous = cards.entries().get(uid, {}).get("tracks")
                 cards.assign(uid, [cards.music_dir / t for t in tracks], **kwargs)
+                positions = getattr(controller, "positions", None)
+                if positions is not None and (kwargs.get("remember_playback") is False or previous != tracks):
+                    positions.forget(uid)  # off, or different tracks: start over next time
                 if art is not None and previous is not None and previous != tracks:
                     art.remove(uid)  # the old tracks' artwork wouldn't fit
             name = cards.custom_name(uid)
@@ -246,6 +261,13 @@ def make_handler(taplog, cards, events=None, controller=None, cover_dir=None,
                              **cards.settings(uid)})
 
         def _delete(self, url) -> None:
+            if url.path == "/api/wifi/networks":
+                self._check_write()
+                uuid = parse_qs(url.query).get("uuid", [""])[0]
+                if not re.fullmatch(r"[0-9a-f-]{36}", uuid):
+                    raise ApiError(400, "not a saved network")
+                self._wifi().client.call("delete", uuid=uuid)
+                return self._json(200, self._wifi().refresh())
             if url.path == "/api/files":
                 self._check_write()
                 with write_lock:
@@ -275,6 +297,8 @@ def make_handler(taplog, cards, events=None, controller=None, cover_dir=None,
         def _post(self, url) -> None:
             if url.path == "/api/volume":
                 return self._post_volume()
+            if url.path.startswith("/api/wifi/"):
+                return self._post_wifi(url.path[len("/api/wifi/"):])
             if url.path in ("/api/files/folder", "/api/files/rename"):
                 self._check_write()
                 body = self._read_json()
@@ -347,9 +371,54 @@ def make_handler(taplog, cards, events=None, controller=None, cover_dir=None,
                     raise ApiError(409, str(e)) from None
                 if art is not None:
                     art.rename(uid, new)
+                positions = getattr(controller, "positions", None)
+                if positions is not None:
+                    positions.rename(uid, new)
             log.info("web: card %s renamed to %s", uid, new)
             self._cards_changed()
             self._json(200, {"uid": new, "tracks": tracks, "track": tracks[0]})
+
+        # --- Wi-Fi -------------------------------------------------------------
+
+        def _wifi(self):
+            if wifi is None:
+                raise ApiError(503, "Wi-Fi settings are not available")
+            return wifi
+
+        def _captive_redirect(self, path: str) -> bool:
+            """In setup mode, a phone checking for internet ("generate_204",
+            "hotspot-detect.html", ...) is sent to the setup page, so it
+            opens it by itself ("sign in to network")."""
+            if wifi is None or not wifi.in_setup:
+                return False
+            ours = path == "/" or path == "/favicon.ico" or path.startswith(("/static/", "/api/"))
+            if ours:
+                return False
+            body = b"Tap to Play setup\n"
+            self.send_response(302)
+            self.send_header("Location", f"http://{HOTSPOT_ADDRESS}/")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return True
+
+        def _post_wifi(self, action: str) -> None:
+            watcher = self._wifi()
+            self._check_write()
+            body = self._read_json()
+            if not isinstance(body, dict):
+                raise ApiError(400, "expected a JSON object")
+            if action == "scan":
+                return self._json(200, watcher.client.call("scan"))
+            if action in ("networks", "setup"):
+                fields = {k: body.get(k) for k in ("ssid", "password")}
+                fields["hidden"] = bool(body.get("hidden"))
+                reply = watcher.client.call("add" if action == "networks" else "setup", **fields)
+                if action == "setup":
+                    return self._json(200, reply)  # the box restarts in a moment
+                return self._json(200, watcher.refresh())
+            raise ApiError(404, "not found")
 
         # --- file manager ----------------------------------------------------
 
@@ -467,9 +536,10 @@ def make_handler(taplog, cards, events=None, controller=None, cover_dir=None,
             try:
                 # The current state first, so a page opened mid-song is right.
                 self._sse("now", now_state())
-                volume = events.latest("volume")
-                if volume is not None:
-                    self._sse("volume", volume)
+                for state in ("volume", "wifi"):
+                    latest = events.latest(state)
+                    if latest is not None:
+                        self._sse(state, latest)
                 while True:
                     try:
                         event, data = q.get(timeout=KEEPALIVE)
@@ -521,6 +591,7 @@ def make_handler(taplog, cards, events=None, controller=None, cover_dir=None,
                             "name": custom or shown["name"], "tag_name": shown["name"],
                             "custom_name": custom,
                             "shuffle": bool(entry.get("shuffle")), "repeat": bool(entry.get("repeat")),
+                            "remember_playback": bool(entry.get("remember_playback")),
                             "art_version": art.version(uid) if art is not None else None})
             return sorted(out, key=lambda c: c["name"].lower())
 
@@ -584,11 +655,11 @@ def make_handler(taplog, cards, events=None, controller=None, cover_dir=None,
 
 def start_web(taplog, cards, events=None, host: str = "0.0.0.0",
               port: int = 80, controller=None, cover_dir=None,
-              art=None, musicbrainz=None, files=None, paths=None) -> ThreadingHTTPServer:
+              art=None, musicbrainz=None, files=None, paths=None, wifi=None) -> ThreadingHTTPServer:
     """Start serving in a daemon thread and return the server."""
     server = ThreadingHTTPServer((host, port),
                                  make_handler(taplog, cards, events, controller, cover_dir,
-                                              art, musicbrainz, files, paths))
+                                              art, musicbrainz, files, paths, wifi))
     server.daemon_threads = True
     threading.Thread(target=server.serve_forever, name="web", daemon=True).start()
     log.info("web page at http://%s:%d/", host, server.server_address[1])

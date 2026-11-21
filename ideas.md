@@ -35,6 +35,25 @@ with the next open item here. Mark items `[x]` when built and checked.
   only the latest 10 taps, with a "View more" button below that opens a modal
   with a table of all taps: 100 per page with pagination, and a search.
 
+- [x] **Edit window: checkboxes, not switches.** Shuffle/Repeat (and the new
+  Remember playback) are saved with the card, so they're checkboxes.
+
+- [x] **Card artwork saves with the card.** Uploading, picking from
+  MusicBrainz or removing artwork only takes effect when you press Save;
+  Cancel discards it.
+
+- [x] **Remember playback (per card).** A `rememberPlayback` flag, off by
+  default, set by a checkbox in the Edit and Assign windows. When on, the
+  next tap resumes where the card left off.
+
+- [x] **Wi-Fi setup.** On start-up with no network, try the saved Wi-Fi
+  networks; if none connects, host an open "Tap to Play Setup" network. A
+  phone that joins gets a page demanding Wi-Fi details; they're saved and
+  the box restarts. A password rejected twice in a row deletes that saved
+  network. Errors go to a timestamped log, readable from the setup page.
+  Saved networks are editable in a new Settings window (gear button, top
+  right), which also takes over the light/dark switch.
+
 ## Decisions (2026-11-20)
 
 - **Shuffle turned on mid-playback:** the current track keeps playing; then
@@ -60,3 +79,19 @@ with the next open item here. Mark items `[x]` when built and checked.
   never starts a song by itself. Next/Previous, Shuffle and Repeat act only
   on the song from the current tap while its card is on the reader, like
   pause and seek do.
+
+## Decisions (2026-11-21)
+
+- **Remember playback:** resumes the same track 5 seconds before where it
+  stopped; after every track has played to the end it starts from the top
+  again. Saved when the card is lifted and every ~15 s while playing.
+- **Setup network:** open (no password), named "Tap to Play Setup".
+- **Ethernet counts as a network:** with a cable connected, setup mode
+  never starts.
+- **Boot wait:** 3 minutes for a saved network before setup mode starts.
+- **No retries in setup mode:** it waits until someone enters Wi-Fi details
+  (or the box is restarted).
+- **Wrong password:** deleted after 2 rejections in a row; a network that is
+  simply out of range is never deleted.
+- **Assign window** gets the same Shuffle / Repeat / Remember playback
+  checkboxes as Edit.

@@ -22,6 +22,7 @@ import threading
 import time
 
 from .media import describe_tracks, display_name, part_title, track_duration
+from .positions import resume_point
 from .player import ControlError
 from .reader import READ_ERROR
 
@@ -34,9 +35,12 @@ ASSIGN_LEASE = 20.0  # seconds assigning mode lasts unless the page renews it
 class MusicBox:
     def __init__(self, reader, player, cards, misses_to_remove: int = 3,
                  taplog=None, events=None, clock=time.time,
-                 duration_of=track_duration, rng=None) -> None:
+                 duration_of=track_duration, rng=None, positions=None) -> None:
         self.reader = reader
         self.player = player
+        self.positions = positions  # where Remember-playback cards left off
+        self._remember = False  # the current tap's card has Remember playback on
+        self._next_position_save = 0.0
         self.cards = cards
         self.taplog = taplog
         self.events = events
@@ -70,8 +74,13 @@ class MusicBox:
                 # The song ended (or was stopped by a safety check) with the
                 # card still on the reader.
                 self._set_now({**self.now, "state": "finished"})
+                if self._remember and self.positions is not None and self.current_uid:
+                    self.positions.forget(self.current_uid)
             elif self.now["state"] == "playing" and self._files:
                 self._follow_queue()
+                if self._remember and time.monotonic() >= self._next_position_save:
+                    self._next_position_save = time.monotonic() + 15.0
+                    self._save_position()
 
         uid = self.reader.read()  # outside the lock: it waits on the reader
         with self._now_lock:
@@ -101,6 +110,7 @@ class MusicBox:
                 self._misses += 1
                 if self._misses >= self.misses_to_remove:
                     log.info("card %s removed", self.current_uid)
+                    self._save_position()
                     self.player.stop()
                     self._effect("remove")
                     self.current_uid = None
@@ -141,9 +151,23 @@ class MusicBox:
         settings = self.cards.settings(uid) if hasattr(self.cards, "settings") else {}
         self._shuffle = bool(settings.get("shuffle"))
         self._repeat = bool(settings.get("repeat"))
-        order = self._round_order(len(files), last=None)
+        self._remember = bool(settings.get("remember_playback")) and self.positions is not None
+        order, start = self._round_order(len(files), last=None), 0.0
+        resume = self._resume_for(uid, files) if self._remember else None
+        if resume is not None:
+            # Carry on: that track first, a few seconds back, then the rest of
+            # the round (in order, or a fresh shuffle of all the others).
+            index, start = resume
+            if self._shuffle:
+                rest = [i for i in range(len(files)) if i != index]
+                self.rng.shuffle(rest)
+                order = [index, *rest]
+            else:
+                order = list(range(index, len(files)))
+            log.info("card %s resumes at track %d, %.0f s", uid, index + 1, start)
         ordered = [files[i] for i in order]
-        played = self.player.play(ordered if len(ordered) > 1 else ordered[0])
+        played = self.player.play(ordered if len(ordered) > 1 else ordered[0], start=start) if start \
+            else self.player.play(ordered if len(ordered) > 1 else ordered[0])
         rel = self._record(uid, track, "played" if played is not False else "blocked")
         # File names for now; tag names and lengths follow from a background
         # thread, so reading them never delays the music.
@@ -153,7 +177,8 @@ class MusicBox:
                 "name": custom or (files[0].stem if len(files) == 1 else f"{files[0].stem} + {len(files) - 1} more"),
                 "artist": None, "parts": len(files), "part": order[0], "track_no": 1,
                 "part_title": first.stem, "cover": files[0].relative_to(self.cards.music_dir).as_posix(),
-                "shuffle": self._shuffle, "repeat": self._repeat}
+                "shuffle": self._shuffle, "repeat": self._repeat,
+                "remember_playback": self._remember, "resumed_at": start or None}
         if played is False:
             self._files = []
             self._queue = []
@@ -165,8 +190,9 @@ class MusicBox:
         self._round_starts = [0]
         self._next_part_check = time.monotonic() + 1.0
         chime = getattr(self.player, "chime_seconds", 0.0)
+        self._next_position_save = time.monotonic() + 15.0
         self._set_now({"state": "playing", **info, "duration": None,
-                       "song_starts_at": self.clock() + chime,
+                       "song_starts_at": self.clock() + chime - start,
                        "controls": bool(getattr(self.player, "controllable", False))})
         self._look_up_info(files, custom)
 
@@ -291,6 +317,8 @@ class MusicBox:
                         log.info("web: next past the last track; stopping")
                         self.player.stop()
                         self._set_now({**base, "state": "finished"})
+                        if self._remember and self.positions is not None:
+                            self.positions.forget(self.current_uid)  # all played: start over next time
                         return self.now
                 self._moved_to(self._qpos + 1, 0.0)
                 log.info("web: next track")
@@ -430,6 +458,40 @@ class MusicBox:
             self._queue_next_round()
         log.info("web: repeat %s", "on" if on else "off")
         self._set_now({**self.now, "repeat": on})
+
+    # --- Remember playback ------------------------------------------------------
+
+    def _resume_for(self, uid: str, files) -> tuple[int, float] | None:
+        """(track index, seconds) to resume this card at, or None to start over."""
+        saved = self.positions.get(uid)
+        if not saved:
+            return None
+        rels = [f.relative_to(self.cards.music_dir).as_posix() for f in files]
+        if saved["track"] not in rels:
+            return None  # the card's tracks changed since: start over
+        return rels.index(saved["track"]), resume_point(saved["position"])
+
+    def _save_position(self) -> None:
+        """Remember where the current card is (Remember playback cards only)."""
+        if not (self._remember and self.current_uid and self._files and self.positions is not None):
+            return
+        now = self.now
+        if now.get("state") == "paused":
+            position = float(now.get("position") or 0.0)
+        elif now.get("state") == "playing" and now.get("song_starts_at") is not None:
+            position = self.clock() - now["song_starts_at"]
+            if position < 0:
+                return  # still the chime: nothing new to remember
+        else:
+            return
+        part = now.get("part", 0)
+        if not 0 <= part < len(self._files):
+            return
+        track = self._files[part].relative_to(self.cards.music_dir).as_posix()
+        try:
+            self.positions.save(self.current_uid, track, position)
+        except OSError as e:
+            log.warning("couldn't remember the position of card %s: %s", self.current_uid, e)
 
     def _effect(self, name: str) -> None:
         """A short sound effect, if the player has one by that name."""

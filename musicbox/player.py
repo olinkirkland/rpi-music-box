@@ -136,11 +136,12 @@ class Player:
         # With play_seconds set, a pause would fight the hard time limit.
         return self.ipc_path is not None and not self.play_seconds
 
-    def play(self, tracks) -> bool:
+    def play(self, tracks, start: float = 0.0) -> bool:
         """Chime, then the track(s) in order. False if refused.
 
-        `tracks` is one path or a list (a folder's files). With play_seconds
-        set, only the first track plays, cut off after that long.
+        `tracks` is one path or a list (a folder's files). `start` begins the
+        first track that many seconds in (Remember playback). With
+        play_seconds set, only the first track plays, cut off after that long.
         """
         files = list(tracks) if isinstance(tracks, (list, tuple)) else [tracks]
         self.stop()
@@ -153,7 +154,7 @@ class Player:
             files = files[:1]
         log.info("playing chime, then %s", ", ".join(str(f) for f in files))
         limit = self.chime_seconds + self.play_seconds if self.play_seconds else None
-        return self._start([self.chime, *files], limit)
+        return self._start([self.chime, *files], limit, first_track_start=start)
 
     def cue(self) -> None:
         """Stop, and play just the chime: a card was seen but has no song."""
@@ -172,7 +173,19 @@ class Player:
         path, seconds = effect
         return self._start([path], seconds)
 
-    def _start(self, files: list, seconds: float | None) -> bool:
+    @staticmethod
+    def _file_args(files: list, first_track_start: float) -> list[str]:
+        """mpv's file arguments: after "--" normally; with a start time, the
+        first track (files[1], after the chime) goes in an mpv per-file
+        group, "--{ --start=S file --}", so only it starts part-way in. That
+        needs option parsing on, so it's only used with absolute paths, which
+        mpv can't mistake for options."""
+        names = [str(f) for f in files]
+        if first_track_start <= 0 or len(names) < 2 or not all(n.startswith("/") for n in names):
+            return ["--", *names]
+        return [names[0], "--{", f"--start={first_track_start:.1f}", names[1], "--}", *names[2:]]
+
+    def _start(self, files: list, seconds: float | None, first_track_start: float = 0.0) -> bool:
         with self._lock:
             if self.mixer is not None and not self.mixer.set_and_verify():
                 log.error("not playing anything: could not confirm the volume is at most %d%%",
@@ -184,7 +197,7 @@ class Player:
             now = self.clock()
             self._deadline = now + seconds + GRACE if seconds is not None else None
             self._next_check = now + CHECK_EVERY
-            self._proc = subprocess.Popen([*self.command, "--", *map(str, files)],
+            self._proc = subprocess.Popen([*self.command, *self._file_args(files, first_track_start)],
                                           stdin=subprocess.DEVNULL)
             return True
 

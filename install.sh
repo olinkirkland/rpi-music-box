@@ -21,8 +21,10 @@ python3 -m venv "$DIR/.venv"
 echo "==> Installing systemd service (runs as $RUN_USER)"
 sed -e "s|@USER@|$RUN_USER|g" -e "s|@DIR@|$DIR|g" "$DIR/systemd/musicbox.service" \
     | sudo tee /etc/systemd/system/musicbox.service >/dev/null
+sed -e "s|@USER@|$RUN_USER|g" -e "s|@DIR@|$DIR|g" "$DIR/systemd/tap-to-play-wifi.service" \
+    | sudo tee /etc/systemd/system/tap-to-play-wifi.service >/dev/null
 sudo systemctl daemon-reload
-sudo systemctl enable musicbox.service
+sudo systemctl enable musicbox.service tap-to-play-wifi.service
 
 echo
 echo "Done. Next: mount the drive, assign cards, then"

@@ -38,17 +38,10 @@
           <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"></path>
         </svg>
       </button>
-      <button type="button" class="theme-toggle" @click="toggleTheme"
-              :aria-label="theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'"
-              :title="theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'">
-        <svg v-if="theme === 'dark'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-             stroke-linecap="round" aria-hidden="true">
-          <circle cx="12" cy="12" r="4.5"></circle>
-          <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"></path>
-        </svg>
-        <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M20.5 14.5A8.5 8.5 0 1 1 9.5 3.5a7 7 0 0 0 11 11z"></path>
+      <button type="button" class="theme-toggle" @click="openSettings" aria-label="Settings" title="Settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="3"></circle>
+          <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"></path>
         </svg>
       </button>
     </div>
@@ -72,10 +65,11 @@
              @error="coverFailed = now.cover">
         <div class="now-main">
           <h2 class="now-title">{{ now.name }}</h2>
-          <p v-if="now.artist || now.parts > 1" class="now-meta">
+          <p v-if="now.artist || now.parts > 1 || now.resumed_at" class="now-meta">
             <span v-if="now.artist">{{ now.artist }}</span>
             <span v-if="now.artist && now.parts > 1" aria-hidden="true"> &middot; </span>
             <span v-if="now.parts > 1">Track {{ now.track_no || now.part + 1 }} of {{ now.parts }}: {{ now.part_title }}</span>
+            <span v-if="now.resumed_at" class="resumed"><span v-if="now.artist || now.parts > 1"> &middot; </span>Resumed at {{ clock(now.resumed_at) }}</span>
           </p>
           <playback-controls v-if="now.state !== 'finished'" :now="now" :position="shownPosition"
                              :in-chime="inChime" :disabled="!canControl" :hint="controlHint"
@@ -148,6 +142,7 @@
               <span v-if="c.kind === 'list'" class="chip">{{ c.parts }} tracks</span>
               <span v-if="c.shuffle" class="chip on" title="Shuffle is on">Shuffle</span>
               <span v-if="c.repeat" class="chip on" title="Repeat is on">Repeat</span>
+              <span v-if="c.remember_playback" class="chip on" title="Carries on where it left off">Resumes</span>
               <span v-if="c.missing_count && !c.missing" class="chip bad">{{ c.missing_count }} missing</span>
               <span v-if="c.artist" class="chip" :title="c.artist">{{ c.artist }}</span>
               <span v-if="!c.missing && c.kind !== 'list' && !c.artist" class="chip">Track</span>
@@ -383,6 +378,118 @@
     </article>
   </dialog>
 
+  <!-- Settings -->
+  <dialog ref="settingsDialog" class="modal" @cancel.prevent @keydown.esc.prevent @close="keepOpen('settingsDialog')">
+    <article v-if="settings.open">
+      <header class="modal-head">
+        <h3>Settings</h3>
+        <button type="button" class="icon-btn modal-x" @click="closeSettings" aria-label="Close" title="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
+      </header>
+
+      <p class="modal-label">Appearance</p>
+      <div role="group" class="volume-steps theme-choice" aria-label="Appearance">
+        <button type="button" :class="{ on: theme === 'light' }" :aria-pressed="theme === 'light'" @click="setTheme('light')">Light</button>
+        <button type="button" :class="{ on: theme === 'dark' }" :aria-pressed="theme === 'dark'" @click="setTheme('dark')">Dark</button>
+      </div>
+
+      <p class="modal-label">Wi-Fi</p>
+      <p v-if="wifi.mode === 'unavailable'" class="field-hint">
+        <strong>Unavailable:</strong> the Wi-Fi service isn't running on the box.
+      </p>
+      <template v-else>
+        <p class="wifi-now">
+          <strong>Connected:</strong>
+          {{ wifi.wifi ? wifi.wifi + " (Wi-Fi)" : wifi.ethernet ? "Ethernet cable" : "not connected" }}
+        </p>
+        <ul class="wifi-saved">
+          <li v-for="n in wifi.saved" :key="n.uuid">
+            <span class="ws-name">{{ n.ssid }}</span>
+            <span v-if="n.ssid === wifi.wifi" class="chip on">In use</span>
+            <span v-else-if="n.rejections" class="chip bad" title="Removed after 2 rejected passwords in a row">Password rejected</span>
+            <button type="button" class="icon-btn danger-icon" @click="removeWifi(n)" :disabled="settings.busy"
+                    :aria-label="'Remove ' + n.ssid" title="Remove">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"></path></svg>
+            </button>
+          </li>
+          <li v-if="!wifi.saved || !wifi.saved.length" class="ws-empty">No saved Wi-Fi networks.</li>
+        </ul>
+        <form class="wifi-add" @submit.prevent="addWifi">
+          <input v-model="settings.ssid" list="wifi-in-range" placeholder="Network name" aria-label="Network name"
+                 autocomplete="off" required maxlength="32">
+          <datalist id="wifi-in-range"><option v-for="n in settings.inRange" :key="n.ssid" :value="n.ssid"></option></datalist>
+          <input v-model="settings.password" type="password" placeholder="Password (empty for an open network)"
+                 aria-label="Password" autocomplete="new-password" maxlength="63">
+          <button type="submit" :disabled="settings.busy || !settings.ssid.trim()">Save network</button>
+        </form>
+        <small class="field-hint">
+          <button type="button" class="link small" @click="scanWifi" :disabled="settings.scanning">
+            {{ settings.scanning ? "Looking\u2026" : "Find networks in range" }}
+          </button>
+          Saved networks are tried when the box starts. Passwords stay on the box.
+        </small>
+        <p v-if="settings.error" class="field-error">{{ settings.error }}</p>
+        <details class="wifi-log">
+          <summary>Wi-Fi log</summary>
+          <ul>
+            <li v-for="(e, i) in wifi.log" :key="i" :class="e.level">
+              <time>{{ dateTime(e.time) }}</time> {{ e.message }}
+            </li>
+            <li v-if="!wifi.log || !wifi.log.length" class="ws-empty">Nothing logged yet.</li>
+          </ul>
+        </details>
+      </template>
+    </article>
+  </dialog>
+
+  <!-- Wi-Fi setup: shown when the box is hosting "Tap to Play Setup". Can't be closed. -->
+  <dialog ref="setupDialog" class="modal" @cancel.prevent @keydown.esc.prevent @close="keepOpen('setupDialog')">
+    <article v-if="setup.open">
+      <header class="modal-head"><h3>Connect Tap to Play to Wi-Fi</h3></header>
+      <template v-if="!setup.done">
+        <p class="setup-intro">The box couldn't find a Wi-Fi network it knows. Choose yours and enter its password;
+          the box saves it and restarts to join it.</p>
+        <form id="setup-form" class="setup-form" @submit.prevent="submitSetup">
+          <label>
+            Network
+            <select v-model="setup.choice" required>
+              <option value="" disabled>Choose a network…</option>
+              <option v-for="n in setup.inRange" :key="n.ssid" :value="n.ssid">
+                {{ n.ssid }}{{ n.secure ? "" : " (open)" }}
+              </option>
+              <option value="__other">Another network (type its name)</option>
+            </select>
+          </label>
+          <label v-if="setup.choice === '__other'">
+            Network name
+            <input v-model="setup.ssid" maxlength="32" autocomplete="off" required>
+          </label>
+          <label>
+            Password
+            <input v-model="setup.password" type="password" maxlength="63" autocomplete="new-password"
+                   placeholder="Leave empty for an open network">
+          </label>
+          <p v-if="setup.error" class="field-error">{{ setup.error }}</p>
+        </form>
+        <details class="wifi-log" :open="setupErrors.length > 0">
+          <summary>Wi-Fi log<span v-if="setupErrors.length"> ({{ setupErrors.length }} problem{{ setupErrors.length === 1 ? "" : "s" }})</span></summary>
+          <ul>
+            <li v-for="(e, i) in wifi.log" :key="i" :class="e.level"><time>{{ dateTime(e.time) }}</time> {{ e.message }}</li>
+            <li v-if="!wifi.log || !wifi.log.length" class="ws-empty">Nothing logged yet.</li>
+          </ul>
+        </details>
+        <footer class="modal-actions">
+          <span class="spacer"></span>
+          <button type="submit" form="setup-form" :disabled="setup.busy || !setupSsid">Connect</button>
+        </footer>
+      </template>
+      <template v-else>
+        <p class="setup-done"><strong>Saved.</strong> Tap to Play is restarting to join
+          <b>{{ setup.joined }}</b>. The “{{ wifi.setup_ssid }}” network will disappear; reconnect this
+          phone to your usual Wi-Fi. If the password was wrong, the setup network comes back in a few minutes.</p>
+      </template>
+    </article>
+  </dialog>
+
   <!-- All taps -->
   <dialog ref="tapsDialog" class="modal wide" @cancel.prevent @keydown.esc.prevent @close="keepOpen('tapsDialog')" @click.self="closeAllTaps">
     <article v-if="allTaps.open">
@@ -460,16 +567,8 @@
       </label>
       <p class="modal-label">Plays</p>
       <track-picker :items="libraryItems" v-model="edit.tracks"></track-picker>
-      <div class="switches">
-        <label class="switch-row">
-          <input type="checkbox" role="switch" v-model="edit.shuffle" :disabled="edit.tracks.length < 2">
-          <span><b>Shuffle</b><small>{{ edit.tracks.length < 2 ? "Needs 2 or more tracks." : "Play the tracks in a random order." }}</small></span>
-        </label>
-        <label class="switch-row">
-          <input type="checkbox" role="switch" v-model="edit.repeat">
-          <span><b>Repeat</b><small>Start over when every track has played.</small></span>
-        </label>
-      </div>
+      <card-options :track-count="edit.tracks.length" v-model:shuffle="edit.shuffle"
+                    v-model:repeat="edit.repeat" v-model:remember-playback="edit.remember"></card-options>
       <p v-if="editNameDropped || editArtDropped" class="field-hint">
         When the card plays something else, its
         {{ editNameDropped && editArtDropped ? "custom name and artwork are" : editNameDropped ? "custom name is" : "artwork is" }}
@@ -491,9 +590,12 @@
             <button type="button" class="secondary outline" @click="$refs.artFile.click()" :disabled="artBusy">Upload image</button>
             <input ref="artFile" type="file" accept="image/jpeg,image/png,image/webp,image/gif" hidden @change="uploadArt">
             <button type="button" class="secondary outline" :class="{ active: artSearch.open }" @click="toggleArtSearch" :disabled="artBusy">Find online</button>
-            <button v-if="edit.art_version" type="button" class="secondary outline danger" @click="removeArt" :disabled="artBusy">Remove</button>
+            <button v-if="editHasOwnArt" type="button" class="secondary outline danger" @click="removeArt" :disabled="artBusy">Remove</button>
           </div>
-          <small class="field-hint">{{ edit.art_version ? "This card's own artwork." : "From the music files." }} Artwork changes save right away; the music files are never changed.</small>
+          <small class="field-hint">
+            <template v-if="edit.artPending"><strong>Not saved yet:</strong> {{ artPendingText }}</template>
+            <template v-else>{{ edit.art_version ? "This card's own artwork." : "From the music files." }}</template>
+          </small>
         </div>
       </div>
       <p v-if="artError" class="field-error">{{ artError }}</p>
@@ -560,6 +662,8 @@
 
       <p class="modal-label">Pick the tracks it plays</p>
       <track-picker :items="libraryItems" v-model="assign.tracks"></track-picker>
+      <card-options :track-count="assign.tracks.length" v-model:shuffle="assign.shuffle"
+                    v-model:repeat="assign.repeat" v-model:remember-playback="assign.remember"></card-options>
 
       <p v-if="assignSame" class="field-hint">This card already plays exactly these tracks.</p>
       <p v-else-if="assignExisting && assign.tracks.length" class="reassign-warning" role="alert">

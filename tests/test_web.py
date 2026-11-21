@@ -79,7 +79,7 @@ def test_assign_change_and_remove_card(server, cards):
         200, [{"uid": "04aabb", "tracks": ["album/a.MP3"], "track": "album/a.MP3",
                "missing": False, "missing_count": 0, "kind": "file", "name": "a", "artist": None,
                "parts": 1, "tag_name": "a", "custom_name": None, "shuffle": False, "repeat": False,
-               "art_version": None}])
+               "remember_playback": False, "art_version": None}])
     assert call(base, "DELETE", "/api/cards/04aabb")[0] == 200
     assert cards.all() == {}
     assert call(base, "DELETE", "/api/cards/04aabb")[0] == 404

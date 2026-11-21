@@ -1,0 +1,19 @@
+# Template: install.sh fills in @USER@ and @DIR@ and copies this to
+# /etc/systemd/system/tap-to-play-wifi.service
+#
+# Wi-Fi for the music box: tries the saved networks at start-up and, if there's
+# no network after 3 minutes, hosts the open "Tap to Play Setup" network. Runs
+# as root because changing networks needs it; the music box (as @USER@) talks
+# to it over /run/tap-to-play/wifi.sock.
+[Unit]
+Description=Tap to Play Wi-Fi setup
+After=NetworkManager.service
+Wants=NetworkManager.service
+
+[Service]
+ExecStart=@DIR@/.venv/bin/tap-to-play-wifi --group @USER@
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
