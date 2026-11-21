@@ -43,6 +43,8 @@ CSS are vendored there, so there is no build step and no internet needed).
     POST   /api/wifi/networks  {"ssid", "password", "hidden"?}: save a network
     DELETE /api/wifi/networks?uuid=U
     POST   /api/wifi/setup     {"ssid", "password"}: setup mode only; saves and restarts
+    POST   /api/system/restart   restart the box (music stops first)
+    POST   /api/system/shutdown  shut the box down; unplug once the green light stops
     GET    /api/volume         {level, steps, available}
     POST   /api/volume         {"level": 0 | 20 | 40 | 60 | 80 | 100}
 
@@ -299,6 +301,8 @@ def make_handler(taplog, cards, events=None, controller=None, cover_dir=None,
                 return self._post_volume()
             if url.path.startswith("/api/wifi/"):
                 return self._post_wifi(url.path[len("/api/wifi/"):])
+            if url.path in ("/api/system/restart", "/api/system/shutdown"):
+                return self._power(url.path.rsplit("/", 1)[1])
             if url.path in ("/api/files/folder", "/api/files/rename"):
                 self._check_write()
                 body = self._read_json()
@@ -402,6 +406,15 @@ def make_handler(taplog, cards, events=None, controller=None, cover_dir=None,
             self.end_headers()
             self.wfile.write(body)
             return True
+
+        def _power(self, action: str) -> None:
+            watcher = self._wifi()  # the Wi-Fi service is the one allowed to do it
+            self._check_write()
+            self._read_json()
+            if controller is not None and hasattr(controller, "stop_for_power"):
+                controller.stop_for_power()
+            log.info("web: %s requested", action)
+            self._json(200, watcher.client.call("power", action=action))
 
         def _post_wifi(self, action: str) -> None:
             watcher = self._wifi()

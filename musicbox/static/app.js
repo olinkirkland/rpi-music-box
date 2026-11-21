@@ -312,6 +312,7 @@ const app = createApp({
             uploads: [], dragging: false, dragDepth: 0, dropTop: 0, dropHeight: 0 },
       newFolder: { open: false, name: "", busy: false, error: "" },
       wifi: { mode: "unavailable", saved: [], log: [] },
+      power: { state: null, busy: false, error: "", wentOffline: false },
       settings: { open: false, ssid: "", password: "", inRange: [], scanning: false, busy: false, error: "" },
       setup: { open: false, choice: "", ssid: "", password: "", inRange: [], busy: false, error: "",
                done: false, joined: "" },
@@ -1047,7 +1048,7 @@ const app = createApp({
     // closes one on a repeated Escape; if a dialog closes while its window is
     // meant to be open, open it again.
     keepOpen(ref) {
-      const open = { settingsDialog: this.settings.open, setupDialog: this.setup.open, filesDialog: this.fm.open, folderDialog: this.newFolder.open, tapsDialog: this.allTaps.open,
+      const open = { powerDialog: !!this.power.state, settingsDialog: this.settings.open, setupDialog: this.setup.open, filesDialog: this.fm.open, folderDialog: this.newFolder.open, tapsDialog: this.allTaps.open,
                      editDialog: this.edit.open, assignDialog: this.assign.open }[ref];
       const el = this.$refs[ref];
       if (open && el && !el.open) el.showModal();
@@ -1108,6 +1109,25 @@ const app = createApp({
         this.settings.error = e.message;
       } finally {
         this.settings.busy = false;
+      }
+    },
+
+    // --- Restart / shut down ------------------------------------------------------
+    async powerAction(kind) {
+      const question = kind === "restart"
+        ? "Restart Tap to Play? Music stops; the box is back in about a minute."
+        : "Shut down Tap to Play? Music stops, and the box stays off until it's unplugged and plugged back in.";
+      if (!confirm(question)) return;
+      this.power.busy = true;
+      this.power.error = "";
+      try {
+        await api("POST", "/api/system/" + kind, {});
+        this.closeSettings();
+        this.power = { state: kind, busy: false, error: "", wentOffline: false };
+        this.$nextTick(() => this.$refs.powerDialog.showModal());
+      } catch (e) {
+        this.power.error = e.message;
+        this.power.busy = false;
       }
     },
 
@@ -1204,6 +1224,12 @@ const app = createApp({
       const source = new EventSource("/api/events");
       source.onopen = () => {
         this.connection = "live";
+        // Back after a restart (we lost the box, and now it answers again).
+        if (this.power.state === "restart" && this.power.wentOffline) {
+          this.power.state = null;
+          this.$refs.powerDialog?.close();
+          this.notify("Tap to Play restarted");
+        }
         // Catch up on anything missed while disconnected.
         this.loadCards();
         this.loadTaps();
@@ -1212,6 +1238,7 @@ const app = createApp({
       source.onerror = () => {
         // EventSource reconnects by itself.
         this.connection = "offline";
+        if (this.power.state) this.power.wentOffline = true;
       };
       source.addEventListener("now", (e) => this.setNow(JSON.parse(e.data)));
       source.addEventListener("tap", (e) => this.addTap(JSON.parse(e.data)));

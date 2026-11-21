@@ -20,7 +20,8 @@ and in Settings. Saved passwords are never sent back to anyone.
 The music box talks to this service over a Unix socket (SOCKET), one JSON
 request and reply per connection: {"cmd": "status"}, {"cmd": "scan"},
 {"cmd": "add", "ssid", "password"}, {"cmd": "delete", "uuid"},
-{"cmd": "setup", "ssid", "password"}.
+{"cmd": "setup", "ssid", "password"}, and {"cmd": "power", "action":
+"restart" | "shutdown"} (it's the box's only service with the permission).
 """
 
 from __future__ import annotations
@@ -317,13 +318,14 @@ class Rejections:
 
 class WifiService:
     def __init__(self, nm: NetworkManager, wifi_log: WifiLog, rejections: Rejections,
-                 clock=time.monotonic, sleep=time.sleep, reboot=None) -> None:
+                 clock=time.monotonic, sleep=time.sleep, reboot=None, poweroff=None) -> None:
         self.nm = nm
         self.log = wifi_log
         self.rejections = rejections
         self.clock = clock
         self.sleep = sleep
         self.reboot = reboot or (lambda: subprocess.run(["systemctl", "reboot"], check=False))
+        self.poweroff = poweroff or (lambda: subprocess.run(["systemctl", "poweroff"], check=False))
         self.mode = "starting"  # "starting" (boot wait), "online" or "setup"
         self.setup_networks: list[dict] = []  # what was in range when setup began
         self._lock = threading.RLock()
@@ -424,6 +426,15 @@ class WifiService:
                 self.log.add("info", f"Saved {ssid} from the setup page; restarting to join it.")
                 threading.Timer(3.0, self.reboot).start()  # after the reply reaches the phone
                 return {"ok": True, "restarting": True}
+            if cmd == "power":
+                action = request.get("action")
+                if action not in ("restart", "shutdown"):
+                    raise WifiError("power action must be restart or shutdown")
+                self.log.add("info", "Restarting, as asked from the page." if action == "restart"
+                             else "Shutting down, as asked from the page.")
+                # A moment's delay so the reply reaches the page first.
+                threading.Timer(2.0, self.reboot if action == "restart" else self.poweroff).start()
+                return {"ok": True, "action": action}
             raise WifiError(f"unknown request: {cmd}")
 
     def status(self) -> dict:

@@ -493,6 +493,15 @@ class MusicBox:
         except OSError as e:
             log.warning("couldn't remember the position of card %s: %s", self.current_uid, e)
 
+    def stop_for_power(self) -> None:
+        """Before a restart or shutdown from the page: stop the music and
+        remember where a Remember-playback card was."""
+        with self._now_lock:
+            self._save_position()
+            self.player.stop()
+            if self.now["state"] in ("playing", "paused"):
+                self._set_now({**self.now, "state": "finished"})
+
     def _effect(self, name: str) -> None:
         """A short sound effect, if the player has one by that name."""
         play = getattr(self.player, "sound", None)

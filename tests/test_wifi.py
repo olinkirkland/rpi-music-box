@@ -309,3 +309,52 @@ def test_wifi_endpoints(web):
     with pytest.raises(HTTPError) as e:
         urlopen(req)
     assert e.value.code == 400
+
+
+def test_power_requests(env, monkeypatch, tmp_path):
+    service, fake, t, reboots = env
+    offs = []
+    service.poweroff = lambda: offs.append(True)
+    monkeypatch.setattr(wifi.threading, "Timer", lambda delay, fn: type("T", (), {"start": lambda self: fn()})())
+    assert service.handle({"cmd": "power", "action": "restart"}) == {"ok": True, "action": "restart"}
+    assert reboots == [True] and offs == []
+    assert service.handle({"cmd": "power", "action": "shutdown"}) == {"ok": True, "action": "shutdown"}
+    assert offs == [True] and reboots == [True]
+    with pytest.raises(WifiError):
+        service.handle({"cmd": "power", "action": "explode"})
+    assert "Shutting down" in service.log.entries()[0]["message"]
+
+
+class PowerController:
+    def __init__(self):
+        self.stopped = 0
+
+    def stop_for_power(self):
+        self.stopped += 1
+
+
+def test_power_endpoints_stop_music_first(tmp_path):
+    (tmp_path / "m").mkdir()
+    watcher = FakeWatcher("online")
+    controller = PowerController()
+    srv = start_web(TapLog(tmp_path / "t.db"), CardStore(tmp_path / "c.json", tmp_path / "m"), EventBus(),
+                    host="127.0.0.1", port=0, wifi=watcher, controller=controller)
+    base = f"http://127.0.0.1:{srv.server_address[1]}"
+    try:
+        def post(path, headers=None):
+            req = Request(base + path, data=b"{}", method="POST",
+                          headers={"Content-Type": "application/json", **(headers or {})})
+            try:
+                with urlopen(req) as r:
+                    return r.status
+            except HTTPError as e:
+                return e.code
+
+        assert post("/api/system/restart") == 200
+        assert controller.stopped == 1 and watcher.calls[-1] == ("power", {"action": "restart"})
+        assert post("/api/system/shutdown", {"Origin": "http://evil.example"}) == 403
+        assert controller.stopped == 1 and watcher.calls[-1][1] == {"action": "restart"}
+        assert post("/api/system/shutdown") == 200 and watcher.calls[-1] == ("power", {"action": "shutdown"})
+    finally:
+        srv.shutdown()
+        srv.server_close()

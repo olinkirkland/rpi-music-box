@@ -438,6 +438,34 @@
           </ul>
         </details>
       </template>
+
+      <p class="modal-label">Power</p>
+      <div class="power-buttons">
+        <button type="button" class="secondary outline with-icon" @click="powerAction('restart')" :disabled="power.busy">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 1-2.3-5.6"></path><path d="M20 4v5h-5"></path></svg>
+          Restart
+        </button>
+        <button type="button" class="secondary outline danger with-icon" @click="powerAction('shutdown')" :disabled="power.busy">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v8"></path><path d="M6.3 6.8a8 8 0 1 0 11.4 0"></path></svg>
+          Shut down
+        </button>
+      </div>
+      <small class="field-hint">Shut down before unplugging the box, so nothing on its memory card is left half-written.</small>
+      <p v-if="power.error" class="field-error">{{ power.error }}</p>
+    </article>
+  </dialog>
+
+  <!-- Restarting / shutting down: tells you what's happening. -->
+  <dialog ref="powerDialog" class="modal" @cancel.prevent @keydown.esc.prevent @close="keepOpen('powerDialog')">
+    <article v-if="power.state">
+      <header class="modal-head"><h3>{{ power.state === "restart" ? "Restarting" : "Shutting down" }}</h3></header>
+      <p v-if="power.state === 'restart'" class="setup-done">
+        Tap to Play is restarting. This page reconnects by itself in about a minute.
+      </p>
+      <p v-else class="setup-done">
+        <strong>Shutting down.</strong> When the green light on the Pi stops blinking (about 20 seconds), it's
+        safe to unplug. To turn it back on, plug it back in.
+      </p>
     </article>
   </dialog>
 

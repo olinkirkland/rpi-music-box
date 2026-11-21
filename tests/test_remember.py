@@ -163,3 +163,12 @@ def test_api_flag_forget_and_rename(setup, tmp_path):
     finally:
         srv.shutdown()
         srv.server_close()
+
+
+def test_stop_for_power_saves_the_position_and_stops(setup):
+    box, player, cards, store, clock, feed = setup
+    feed("aa11")
+    box.now["song_starts_at"] = clock["t"] - 42.0
+    box.stop_for_power()
+    assert store.get("aa11")["position"] == 42.0
+    assert not player.playing and box.now["state"] == "finished"
