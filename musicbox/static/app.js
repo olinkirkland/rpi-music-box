@@ -96,9 +96,10 @@ const TrackPicker = {
     <div class="picker">
       <div class="picked" aria-label="Selected tracks">
         <p class="picked-head">
-          <b>Selected{{ modelValue.length ? ": " + modelValue.length + (modelValue.length === 1 ? " track" : " tracks") : "" }}</b>
-          <span v-if="modelValue.length > 1">play in this order</span>
-          <span v-else-if="!modelValue.length">pick tracks from the list</span>
+          <strong>Selected:</strong>
+          <span v-if="!modelValue.length">Pick from available tracks.</span>
+          <span v-else-if="modelValue.length === 1">1 track.</span>
+          <span v-else>{{ modelValue.length }} tracks, played in this order.</span>
         </p>
         <p v-if="!modelValue.length" class="picked-empty">Nothing selected yet.</p>
         <ol v-else class="picked-list">

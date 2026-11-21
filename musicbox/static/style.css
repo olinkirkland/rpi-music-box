@@ -453,7 +453,7 @@ button.warning:hover { background: color-mix(in srgb, var(--mb-warn) 85%, #000);
   background: var(--pico-card-sectioning-background-color); border: 1px solid var(--pico-muted-border-color);
 }
 .picked-head { margin: 0; font-size: 0.82rem; color: var(--pico-muted-color); display: flex; gap: 0.4rem; align-items: baseline; }
-.picked-head b { color: var(--mb-text); font-weight: 600; }
+.picked-head strong { color: var(--mb-text); font-weight: 600; }
 .picked-list { display: flex; flex-direction: column; gap: 0.3rem; list-style: none; margin: 0.45rem 0 0; padding: 0; max-height: 12rem; overflow-y: auto; }
 .picked-list li {
   display: flex; align-items: center; gap: 0.55rem; margin: 0; padding: 0.35rem 0.45rem;
@@ -506,14 +506,14 @@ button.warning:hover { background: color-mix(in srgb, var(--mb-warn) 85%, #000);
 .switch-row small { font-size: 0.75rem; color: var(--pico-muted-color); }
 
 /* Picker layout: stacked on small screens, side by side on large ones. */
-.picker { display: grid; grid-template-areas: "picked" "available"; gap: 0.6rem; }
-.picker .picked { grid-area: picked; margin-bottom: 0; }
+.picker { display: grid; grid-template-areas: "picked" "available"; grid-template-columns: minmax(0, 1fr); gap: 0.6rem; }
+.picker .picked { grid-area: picked; margin-bottom: 0; min-width: 0; }
 .picker .available { grid-area: available; min-width: 0; }
 .picked-empty { margin: 0.4rem 0 0; font-size: 0.8rem; color: var(--pico-muted-color); }
 @media (min-width: 960px) {
   /* New / Edit card: wide, so available and selected tracks sit side by side comfortably. */
   dialog.modal > article { width: min(76rem, calc(100vw - 4rem)); }
-  .picker { grid-template-areas: "available picked"; grid-template-columns: 1fr 1fr; align-items: stretch; }
+  .picker { grid-template-areas: "available picked"; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: stretch; }
   .picker .available, .picker .picked { display: flex; flex-direction: column; }
   /* Both columns scroll on their own, at the same height. */
   .picker .picker-list, .picker .picked-list { height: 22rem; max-height: none; }
@@ -523,14 +523,6 @@ button.warning:hover { background: color-mix(in srgb, var(--mb-warn) 85%, #000);
     border: 1.5px dashed var(--pico-muted-border-color); border-radius: 8px; }
 }
 
-/* Play Mode button on the tile */
-.now-label .play-mode-btn {
-  margin: 0 0 0 auto; padding: 0.25rem 0.65rem; display: inline-flex; align-items: center; gap: 0.35rem;
-  font-size: 0.78rem; font-weight: 600; border-radius: 999px; width: auto;
-  background: transparent; color: var(--pico-muted-color); border: 1px solid var(--pico-muted-border-color); box-shadow: none;
-}
-.now-label .play-mode-btn svg { width: 0.95rem; height: 0.95rem; }
-.now-label .play-mode-btn:hover { color: var(--mb-accent); border-color: var(--mb-accent); background: transparent; }
 
 /* Play Mode: full screen */
 .play-mode {
@@ -666,3 +658,16 @@ button.with-icon svg { flex: none; width: 1.05rem; height: 1.05rem; }
 .fm-crumb { display: inline-flex; align-items: center; gap: 0.3rem; }
 .fm-crumb svg { width: 1rem; height: 1rem; }
 .fm-crumbs { margin-bottom: 0.6rem; }
+
+/* Tap log button: "View more" on wide screens, "Show all" on phones. */
+.label-narrow { display: none; }
+
+@media (max-width: 600px) {
+  /* Phones: the tap log is just its button. */
+  .taps-panel .table-wrap, .taps-panel .panel-head small { display: none; }
+  .taps-panel .taps-more button { width: 100%; }
+  .label-wide { display: none; }
+  .label-narrow { display: inline; }
+  /* Track rows never push past the window. */
+  .picker-list li, .picked-list li { min-width: 0; }
+}

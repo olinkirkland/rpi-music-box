@@ -31,6 +31,12 @@
       <span class="live" :class="connection" :title="connectionLabel">
         <span class="dot" aria-hidden="true"></span>{{ connectionLabel }}
       </span>
+      <button type="button" class="theme-toggle" @click="openPlayMode"
+              aria-label="Play Mode (full screen)" title="Play Mode (full screen)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"></path>
+        </svg>
+      </button>
       <button type="button" class="theme-toggle" @click="toggleTheme"
               :aria-label="theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'"
               :title="theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'">
@@ -52,12 +58,6 @@
     <div class="now-label">
       <span class="pill" :class="now.state">{{ nowLabel }}</span>
       <code v-if="now.uid" class="uid">{{ now.uid }}</code>
-      <button type="button" class="play-mode-btn" @click="openPlayMode" title="Play Mode: full screen">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"></path>
-        </svg>
-        Play Mode
-      </button>
     </div>
 
     <template v-if="now.state === 'idle'">
@@ -188,7 +188,7 @@
   </article>
 
   <!-- Tap log -->
-  <article>
+  <article class="taps-panel">
     <header class="panel-head">
       <h2>Card taps</h2>
       <small>Latest {{ taps.length }}</small>
@@ -216,7 +216,9 @@
       <p v-if="!taps.length" class="empty">No cards tapped yet.</p>
     </div>
     <footer v-if="taps.length" class="taps-more">
-      <button type="button" class="secondary outline" @click="openAllTaps">View more</button>
+      <button type="button" class="secondary outline" @click="openAllTaps">
+        <span class="label-wide">View more</span><span class="label-narrow">Show all</span>
+      </button>
     </footer>
   </article>
 
@@ -235,7 +237,7 @@
           <path d="M12 3.5L2.5 20h19z"></path><path d="M12 10v4.5M12 17.5v.01"></path>
         </svg>
         <span>
-          <b>Advanced file management.</b>
+          <strong>Advanced:</strong>
           Upload, rename and delete the files in the music folder on the Pi directly.
           Changes take effect right away, deleted files can't be recovered, and renaming or
           deleting changes every card that uses those files. To change what a card plays, use
