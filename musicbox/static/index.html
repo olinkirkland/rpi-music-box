@@ -181,7 +181,9 @@
   <article class="files-panel">
     <div class="files-body">
       <p>Upload new tracks, and organize, rename or delete the files in your music library.</p>
-      <button type="button" class="secondary outline files-open" @click="openFiles('')">Manage files</button>
+      <button type="button" class="secondary outline files-open with-icon" @click="openFiles('')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h4l2 2h9A1.5 1.5 0 0 1 21 9.5v8a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5z"></path></svg>Manage files
+      </button>
     </div>
   </article>
 
@@ -240,28 +242,28 @@
           <b>Edit</b> on the card instead.
         </span>
       </p>
-      <nav class="fm-crumbs" aria-label="Folder">
+      <!-- Where you are: shown inside a folder only. -->
+      <nav v-if="fm.path" class="fm-crumbs" aria-label="Folder">
         <template v-for="(c, i) in fm.crumbs" :key="c.path">
           <span v-if="i" class="fm-sep" aria-hidden="true">/</span>
           <button type="button" class="fm-crumb" :class="{ here: c.path === fm.path }" @click="openFolder(c.path)"
-                  :aria-current="c.path === fm.path ? 'location' : null">{{ c.name }}</button>
+                  :aria-current="c.path === fm.path ? 'location' : null">
+            <template v-if="i === 0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11l8-6.5 8 6.5M6 9.5V19h12V9.5"></path></svg>All files</template>
+            <template v-else>{{ c.name }}</template>
+          </button>
         </template>
       </nav>
-      <button type="button" class="copy-id path fm-abs" @click="copy(fm.absolute)" :title="'Copy ' + fm.absolute">
-        <code>{{ fm.absolute }}</code><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15V5a2 2 0 0 1 2-2h8"></path></svg>
-      </button>
 
       <div class="fm-tools">
-        <button type="button" @click="$refs.fmUpload.click()" :disabled="fm.busy">Upload files</button>
+        <button type="button" class="with-icon" @click="$refs.fmUpload.click()" :disabled="fm.busy">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V4M7.5 8.5L12 4l4.5 4.5"></path><path d="M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15"></path></svg>Upload files
+        </button>
         <input ref="fmUpload" type="file" multiple hidden
                accept="audio/*,.mp3,.m4a,.aac,.flac,.ogg,.oga,.opus,.wav,image/jpeg,image/png,image/webp"
                @change="pickUploads">
-        <form v-if="fm.newFolder !== null" class="fm-inline" @submit.prevent="makeFolder">
-          <input v-model="fm.newFolder" placeholder="New folder name" aria-label="New folder name" maxlength="200" required>
-          <button type="submit" :disabled="fm.busy">Create</button>
-          <button type="button" class="secondary" @click="fm.newFolder = null">Cancel</button>
-        </form>
-        <button v-else type="button" class="secondary outline" @click="fm.newFolder = ''" :disabled="fm.busy">New folder</button>
+        <button type="button" class="secondary outline with-icon" @click="openNewFolder" :disabled="fm.busy">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h4l2 2h9A1.5 1.5 0 0 1 21 9.5v8a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5z"></path><path d="M12 11v5M9.5 13.5h5"></path></svg>New folder
+        </button>
         <span class="spacer"></span>
         <small class="field-hint" v-if="fm.disk">{{ bytes(fm.disk.free) }} free</small>
       </div>
@@ -341,6 +343,31 @@
       </div>
       <footer class="modal-actions fm-foot">
         <small class="field-hint">Renaming a file or folder updates every card that uses it. Files you delete are taken out of cards' track lists.</small>
+      </footer>
+    </article>
+  </dialog>
+
+  <!-- New folder -->
+  <dialog ref="folderDialog" class="modal" @cancel.prevent="closeNewFolder">
+    <article v-if="newFolder.open">
+      <header class="modal-head">
+        <h3>New folder</h3>
+        <button type="button" class="icon-btn modal-x" @click="closeNewFolder" aria-label="Close" title="Close"
+                :disabled="newFolder.busy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
+      </header>
+      <form id="new-folder-form" @submit.prevent="makeFolder">
+        <label>
+          Folder name
+          <input ref="newFolderInput" v-model="newFolder.name" class="name-input" maxlength="200"
+                 autocomplete="off" required :aria-invalid="newFolder.error ? 'true' : null">
+          <small class="field-hint">Created in <b>{{ fm.path ? fm.crumbs[fm.crumbs.length - 1].name : "All files" }}</b>.</small>
+        </label>
+        <p v-if="newFolder.error" class="field-error">{{ newFolder.error }}</p>
+      </form>
+      <footer class="modal-actions">
+        <span class="spacer"></span>
+        <button type="button" class="secondary" @click="closeNewFolder" :disabled="newFolder.busy">Cancel</button>
+        <button type="submit" form="new-folder-form" :disabled="!newFolder.name.trim() || newFolder.busy">Create folder</button>
       </footer>
     </article>
   </dialog>

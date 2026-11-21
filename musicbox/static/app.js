@@ -267,8 +267,9 @@ const app = createApp({
       volumeBusy: false,
       playMode: false,
       fm: { open: false, path: "", absolute: "", crumbs: [], folders: [], files: [], disk: null,
-            loading: false, busy: false, error: "", newFolder: null, renaming: null, renameTo: "",
+            loading: false, busy: false, error: "", renaming: null, renameTo: "",
             uploads: [], dragging: false },
+      newFolder: { open: false, name: "", busy: false, error: "" },
       allTaps: { open: false, query: "", page: 1, pages: 1, total: 0, rows: [], busy: false, error: "" },
       controlBusy: false,
       edit: { open: false, orig: null, uid: "", name: "", tracks: [], shuffle: false, repeat: false,
@@ -531,7 +532,7 @@ const app = createApp({
       return uids.map((u) => this.cardName(u) || u).join(", ");
     },
     openFiles(path) {
-      this.fm = { ...this.fm, open: true, error: "", uploads: [], newFolder: null, renaming: null, dragging: false };
+      this.fm = { ...this.fm, open: true, error: "", uploads: [], renaming: null, dragging: false };
       this.$nextTick(() => this.$refs.filesDialog.showModal());
       this.openFolder(path);
     },
@@ -569,12 +570,33 @@ const app = createApp({
         this.fm.busy = false;
       }
     },
-    makeFolder() {
-      const name = this.fm.newFolder;
-      return this.fmAction(async () => {
-        await api("POST", "/api/files/folder", { path: this.fm.path, name });
-        this.fm.newFolder = null;
+    openNewFolder() {
+      this.newFolder = { open: true, name: "", busy: false, error: "" };
+      this.$nextTick(() => {
+        this.$refs.folderDialog.showModal();
+        this.$refs.newFolderInput?.focus();
       });
+    },
+    closeNewFolder() {
+      if (this.newFolder.busy) return;
+      this.$refs.folderDialog.close();
+      this.newFolder.open = false;
+    },
+    async makeFolder() {
+      const name = this.newFolder.name.trim();
+      if (!name) return;
+      this.newFolder.busy = true;
+      this.newFolder.error = "";
+      try {
+        await api("POST", "/api/files/folder", { path: this.fm.path, name });
+        this.newFolder.busy = false;
+        this.closeNewFolder();
+        this.notify("Created folder " + name);
+        await this.openFolder(this.fm.path);
+      } catch (e) {
+        this.newFolder.error = e.message;
+        this.newFolder.busy = false;
+      }
     },
     startRename(item) {
       this.fm.renaming = item.path;
