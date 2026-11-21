@@ -269,7 +269,7 @@ const app = createApp({
       playMode: false,
       fm: { open: false, path: "", absolute: "", crumbs: [], folders: [], files: [], disk: null,
             loading: false, busy: false, error: "", renaming: null, renameTo: "", renameExt: "",
-            uploads: [], dragging: false },
+            uploads: [], dragging: false, dragDepth: 0, dropTop: 0, dropHeight: 0 },
       newFolder: { open: false, name: "", busy: false, error: "" },
       allTaps: { open: false, query: "", page: 1, pages: 1, total: 0, rows: [], busy: false, error: "" },
       controlBusy: false,
@@ -543,7 +543,7 @@ const app = createApp({
       return uids.map((u) => this.cardName(u) || u).join(", ");
     },
     openFiles(path) {
-      this.fm = { ...this.fm, open: true, error: "", uploads: [], renaming: null, dragging: false };
+      this.fm = { ...this.fm, open: true, error: "", uploads: [], renaming: null, dragging: false, dragDepth: 0 };
       this.$nextTick(() => this.$refs.filesDialog.showModal());
       this.openFolder(path);
     },
@@ -646,8 +646,40 @@ const app = createApp({
       event.target.value = "";
       this.uploadAll(files);
     },
+    // Dragging files in. Enter/leave also fire for every row the pointer
+    // crosses, so count them: the overlay stays until the drag truly leaves.
+    isFileDrag(event) {
+      return [...(event.dataTransfer?.types || [])].includes("Files");
+    },
+    placeDropOverlay() {
+      // Cover just the part of the (scrollable) window that's on screen.
+      const el = this.$refs.fmArticle;
+      if (!el) return;
+      this.fm.dropTop = el.scrollTop;
+      this.fm.dropHeight = el.clientHeight;
+    },
+    dragEnter(event) {
+      if (!this.isFileDrag(event)) return;
+      this.fm.dragDepth += 1;
+      this.placeDropOverlay();
+      this.fm.dragging = true;
+    },
+    dragOver(event) {
+      if (!this.isFileDrag(event)) return;
+      event.dataTransfer.dropEffect = "copy";
+      if (!this.fm.dragging) {
+        this.placeDropOverlay();
+        this.fm.dragging = true;
+      }
+    },
+    dragLeave(event) {
+      if (!this.isFileDrag(event)) return;
+      this.fm.dragDepth = Math.max(0, this.fm.dragDepth - 1);
+      if (this.fm.dragDepth === 0) this.fm.dragging = false;
+    },
     dropFiles(event) {
       this.fm.dragging = false;
+      this.fm.dragDepth = 0;
       this.uploadAll([...(event.dataTransfer?.files || [])]);
     },
     uploadLabel(u) {
@@ -1053,8 +1085,17 @@ const app = createApp({
       }
     });
     // Leaving browser full screen (Esc, swipe) also leaves Play Mode.
-    // Escape can always leave browser full screen (pages can't stop that),
-    // but Play Mode itself stays open, filling the window; only its X closes it.
+    // Escape closes Play Mode (the one exception to "Escape never closes"):
+    // in browser full screen, Escape leaves full screen, which closes it too.
+    document.addEventListener("fullscreenchange", () => {
+      if (!document.fullscreenElement && this.playMode) this.playMode = false;
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && this.playMode) {
+        e.preventDefault();
+        this.closePlayMode();
+      }
+    });
     this.connect();
     setInterval(() => (this.tick = Date.now() / 1000), 250);
   },

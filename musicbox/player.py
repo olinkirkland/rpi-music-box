@@ -99,7 +99,7 @@ class Player:
                  command: list[str] | None = None, chime: Path | None = None,
                  chime_seconds: float = 0.0, play_seconds: float = 0,
                  mixer: Mixer | None = None, clock=time.monotonic,
-                 ipc_dir: Path | None = None) -> None:
+                 ipc_dir: Path | None = None, sounds: dict | None = None) -> None:
         if command is None:
             volume = max(0, min(int(volume), 100))
             command = ["mpv", "--no-video", "--no-terminal",
@@ -118,6 +118,8 @@ class Player:
         # a USB sound card can only be opened by one program at a time.
         self.chime = chime
         self.chime_seconds = chime_seconds
+        # Other short effects by name ({"remove": (path, seconds), ...}).
+        self.sounds = dict(sounds or {})
         self.play_seconds = play_seconds
         self.mixer = mixer
         self.clock = clock
@@ -158,6 +160,17 @@ class Player:
         self.stop()
         if self.chime is not None:
             self._start([self.chime], self.chime_seconds)
+
+    def sound(self, name: str) -> bool:
+        """Stop, and play one short effect (e.g. "remove", "assign"), with the
+        same volume checks as everything else. False if there's none or it was
+        refused. Only ever called because of a card on the reader."""
+        self.stop()
+        effect = self.sounds.get(name)
+        if effect is None:
+            return False
+        path, seconds = effect
+        return self._start([path], seconds)
 
     def _start(self, files: list, seconds: float | None) -> bool:
         with self._lock:

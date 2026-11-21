@@ -22,7 +22,7 @@ musicbox = "musicbox.cli:main"
 packages = ["musicbox"]
 
 [tool.setuptools.package-data]
-musicbox = ["static/*", "static/vendor/*", "static/components/*"]
+musicbox = ["static/*", "static/vendor/*", "static/components/*", "sounds/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

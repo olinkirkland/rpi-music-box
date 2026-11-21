@@ -21,10 +21,16 @@ audio_device = ""
 # this for the overall loudness.
 mixer_volume = -1
 
-# A chime plays when a card is tapped, then the card's song. chime_file is
-# required: without a chime nothing plays. chime_volume (0-100) scales the
-# chime file's own loudness. Any format ffmpeg reads works.
+# Sound effects, all scaled to chime_volume (0-100, of each file's own
+# loudness). Empty uses the sound bundled with the app (musicbox/sounds);
+# a path uses your own file (any format ffmpeg reads).
+#   chime_file         when a card is placed, before its tracks. Required:
+#                      a song only ever plays after it.
+#   remove_chime_file  when a card is lifted ("off" for silence)
+#   assign_chime_file  when the Assign window reads a card ("off" for silence)
 chime_file = ""
+remove_chime_file = ""
+assign_chime_file = ""
 chime_volume = 25
 
 # Stop each song after this many seconds. 0 plays the whole song.

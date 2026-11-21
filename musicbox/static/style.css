@@ -611,7 +611,6 @@ dialog.modal.wide > article { width: min(64rem, calc(100vw - 2rem)); }
 .copy-id.path { font-size: 0.85rem; max-width: 100%; margin-left: -0.4rem; }
 
 /* File manager */
-.fm.dragging { box-shadow: inset 0 0 0 3px var(--mb-accent); }
 .fm-tools { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
 .fm-tools > button { margin: 0; width: auto; padding: 0.4rem 1rem; font-size: 0.88rem; }
 .fm-tools .spacer { flex: 1; }
@@ -705,3 +704,18 @@ button.with-icon svg { flex: none; width: 1.05rem; height: 1.05rem; }
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .original-name strong { font-weight: 600; }
+
+/* Dragging files into Manage files: the window turns translucent blue with
+   a message in the middle. It covers what's on screen, above the header. */
+dialog.modal > article.fm { position: relative; }
+.fm-drop {
+  position: absolute; left: 0; right: 0; z-index: 20; pointer-events: none;
+  display: flex; align-items: center; justify-content: center; padding: 1.5rem;
+  background: color-mix(in srgb, var(--mb-accent) 72%, transparent);
+  backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
+  border-radius: 14px; color: #fff;
+}
+.fm-drop-inner { display: flex; flex-direction: column; align-items: center; gap: 0.5rem; text-align: center; }
+.fm-drop-inner svg { width: 3rem; height: 3rem; }
+.fm-drop-inner b { font-size: 1.3rem; font-weight: 700; }
+.fm-drop-inner span { font-size: 0.88rem; opacity: 0.9; }

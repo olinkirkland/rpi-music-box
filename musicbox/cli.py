@@ -34,6 +34,10 @@ def _card_name(audio_device: str) -> str:
     return m.group(1) if m else ""
 
 
+# The sound effects that ship with the app.
+SOUNDS_DIR = Path(__file__).resolve().parent / "sounds"
+
+
 def _where_things_live(args, config, art_dir: Path, cache_dir: Path) -> dict:
     """Paths and commands for troubleshooting on the Pi itself."""
     config_file = Path(args.config or os.environ.get("MUSICBOX_CONFIG") or DEFAULT_CONFIG_PATH).expanduser()
@@ -60,24 +64,36 @@ def cmd_run(args, config, cards) -> int:
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
     taplog = TapLog(config.taps_file)
     events = EventBus()
-    chime, chime_seconds = None, 0.0
-    if config.chime_file:
+    cache = Path("~/.cache/musicbox").expanduser()
+
+    def load_sound(setting: str, bundled: str, what: str):
+        """(cached WAV at chime_volume, its length) for one sound, or (None, 0)."""
+        if setting.strip().lower() == "off":
+            return None, 0.0
+        source = Path(setting).expanduser() if setting.strip() else SOUNDS_DIR / bundled
         try:
-            chime = prepare_chime(Path("~/.cache/musicbox").expanduser(), config.chime_volume,
-                                  Path(config.chime_file).expanduser())
-            chime_seconds = chime_duration(chime)
+            path = prepare_chime(cache, config.chime_volume, source)
+            return path, chime_duration(path)
         except (OSError, EOFError, wave.Error) as e:
-            chime = None
-            logging.error("chime unusable, so nothing will play: %s", e)
-    else:
-        logging.error("no chime_file set, so nothing will play (a song only plays after the chime)")
+            logging.error("%s sound unusable (%s): %s", what, source, e)
+            return None, 0.0
+
+    chime, chime_seconds = load_sound(config.chime_file, "chime-add-card.mp3", "card-placed")
+    if chime is None:
+        logging.error("no card-placed chime, so nothing will play (a song only plays after the chime)")
+    sounds = {}
+    for name, setting, bundled in (("remove", config.remove_chime_file, "chime-remove-card.mp3"),
+                                   ("assign", config.assign_chime_file, "chime-assign.mp3")):
+        path, seconds = load_sound(setting, bundled, name)
+        if path is not None:
+            sounds[name] = (path, seconds)
     mixer = None
     if config.mixer_volume >= 0:
         mixer = Mixer(_card_name(config.audio_device), config.mixer_volume)
     box = MusicBox(
         reader=Reader(timeout=config.read_timeout, serial_port=config.serial_port),
         player=Player(volume=config.volume, audio_device=config.audio_device,
-                      chime=chime, chime_seconds=chime_seconds,
+                      chime=chime, chime_seconds=chime_seconds, sounds=sounds,
                       play_seconds=config.play_seconds, mixer=mixer,
                       ipc_dir=Path("~/.cache/musicbox").expanduser()),
         cards=cards,

@@ -102,6 +102,7 @@ class MusicBox:
                 if self._misses >= self.misses_to_remove:
                     log.info("card %s removed", self.current_uid)
                     self.player.stop()
+                    self._effect("remove")
                     self.current_uid = None
                     self._files = []
                     self._queue = []
@@ -183,7 +184,7 @@ class MusicBox:
         """
         with self._now_lock:
             if not self.assigning:
-                log.info("web: assigning mode on (taps are read, not played)")
+                log.info("web: assigning mode on (taps are read and chime; tracks are not played)")
             self._assign_until = time.monotonic() + ASSIGN_LEASE
             return {"active": True}
 
@@ -199,8 +200,10 @@ class MusicBox:
             return {"active": False}
 
     def _read_for_assigning(self, uid: str, tracks) -> None:
-        """A tap while the Assign modal is open: report it, play nothing."""
+        """A tap while the Assign modal is open: report it, and play the assign
+        chime (never the card's tracks)."""
         self.player.stop()  # a quick card swap may not have registered a lift
+        self._effect("assign")
         self._files = []
         rel = self._record(uid, tracks[0] if tracks else None, "assigning")
         name = self._custom_name(uid)
@@ -427,6 +430,12 @@ class MusicBox:
             self._queue_next_round()
         log.info("web: repeat %s", "on" if on else "off")
         self._set_now({**self.now, "repeat": on})
+
+    def _effect(self, name: str) -> None:
+        """A short sound effect, if the player has one by that name."""
+        play = getattr(self.player, "sound", None)
+        if play is not None:
+            play(name)
 
     def _custom_name(self, uid: str) -> str | None:
         get = getattr(self.cards, "custom_name", None)

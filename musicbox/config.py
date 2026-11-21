@@ -24,7 +24,12 @@ class Config:
     web_enabled: bool = True
     web_port: int = 80
     chime_volume: int = 25
+    # Sound effects. Empty: the sound bundled in musicbox/sounds. A path: your
+    # own file. "off" turns the removal or assign sound off (the card-placed
+    # chime can't be: a song only ever plays after it).
     chime_file: str = ""
+    remove_chime_file: str = ""
+    assign_chime_file: str = ""
     play_seconds: float = 0
 
     def __post_init__(self) -> None:

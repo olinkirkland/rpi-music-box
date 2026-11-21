@@ -173,7 +173,7 @@ The card mapping lives in `~/.config/musicbox/cards.json`, a plain
 
 - Card placed: the chime plays, then the card's track from the start (for
   `play_seconds` if set, otherwise the whole track).
-- Card removed: playback stops. Lifting a card never makes a sound.
+- Card removed: playback stops, and a short removal chime plays.
 - Track ends with the card still on the reader: silence. Lift and replace the
   card to hear it again.
 - A different card placed: switches to that card's track.
@@ -183,7 +183,10 @@ The card mapping lives in `~/.config/musicbox/cards.json`, a plain
 
 ### Sound safety
 
-Sound only ever plays because a card was tapped:
+Sound only ever plays because of a card on the reader: placing one (the
+chime, then its tracks), lifting one (the removal chime), or tapping one while
+the Assign window is open (the assign chime, never the tracks). The three
+chimes ship in `musicbox/sounds/`; see `config.example.toml` to swap them.
 
 - Nothing plays at start-up, even if a card is already on the reader (lift
   and replace it to play), and a reader glitch is never taken as a tap.

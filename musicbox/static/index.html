@@ -225,8 +225,19 @@
 
   <!-- File manager -->
   <dialog ref="filesDialog" class="modal wide" @cancel.prevent @keydown.esc.prevent @close="keepOpen('filesDialog')">
-    <article v-if="fm.open" class="fm" :class="{ dragging: fm.dragging }"
-             @dragover.prevent="fm.dragging = true" @dragleave.self="fm.dragging = false" @drop.prevent="dropFiles">
+    <article v-if="fm.open" ref="fmArticle" class="fm"
+             @dragenter.prevent="dragEnter" @dragover.prevent="dragOver" @dragleave="dragLeave" @drop.prevent="dropFiles">
+      <!-- Drag files in: covers the visible part of the window. -->
+      <div v-if="fm.dragging" class="fm-drop" :style="{ top: fm.dropTop + 'px', height: fm.dropHeight + 'px' }"
+           aria-hidden="true">
+        <div class="fm-drop-inner">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 15V4M7.5 8.5L12 4l4.5 4.5"></path><path d="M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15"></path>
+          </svg>
+          <b>Drop to upload</b>
+          <span>into {{ fm.path ? fm.crumbs[fm.crumbs.length - 1].name : "All files" }} &middot; audio files and cover images</span>
+        </div>
+      </div>
       <header class="modal-head">
         <h3>Manage files</h3>
         <button type="button" class="icon-btn modal-x" @click="closeFiles" aria-label="Close" title="Close">
@@ -570,7 +581,7 @@
   <div v-if="playMode" ref="playModeEl" class="play-mode" role="dialog" aria-modal="true" aria-label="Play Mode"
        tabindex="-1">
     <div v-if="coverUrl" class="pm-backdrop" :style="{ backgroundImage: 'url(' + coverUrl + ')' }" aria-hidden="true"></div>
-    <button type="button" class="pm-close" @click="closePlayMode" aria-label="Leave Play Mode" title="Leave Play Mode">
+    <button type="button" class="pm-close" @click="closePlayMode" aria-label="Leave Play Mode" title="Leave Play Mode (Esc)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg>
     </button>
     <div class="pm-body">
