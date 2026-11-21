@@ -11,6 +11,9 @@ import os
 from pathlib import Path
 
 
+AUDIO_EXTENSIONS = {".mp3", ".m4a", ".aac", ".flac", ".ogg", ".oga", ".opus", ".wav"}
+
+
 class CardStore:
     def __init__(self, cards_file: Path, music_dir: Path) -> None:
         self.cards_file = cards_file
@@ -32,6 +35,18 @@ class CardStore:
 
     def all(self) -> dict[str, str]:
         return dict(self._load())
+
+    def tracks(self) -> list[str]:
+        """Every audio file under the music directory, relative to it, sorted."""
+        if not self.music_dir.is_dir():
+            return []
+        found = (
+            p.relative_to(self.music_dir).as_posix()
+            for p in self.music_dir.rglob("*")
+            if p.suffix.lower() in AUDIO_EXTENSIONS and p.is_file()
+            and not any(part.startswith(".") for part in p.relative_to(self.music_dir).parts)
+        )
+        return sorted(found, key=str.lower)
 
     def track_for(self, uid: str) -> Path | None:
         """Absolute path of the track assigned to `uid`, if any."""

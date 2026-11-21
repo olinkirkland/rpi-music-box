@@ -8,7 +8,7 @@ RUN_USER="${SUDO_USER:-$USER}"
 
 echo "==> Installing system packages"
 sudo apt-get update
-sudo apt-get install -y mpv python3-venv python3-dev i2c-tools
+sudo apt-get install -y mpv ffmpeg python3-venv python3-dev i2c-tools
 
 echo "==> Enabling I2C"
 sudo raspi-config nonint do_i2c 0

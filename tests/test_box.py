@@ -2,6 +2,7 @@ from pathlib import Path
 
 from musicbox.box import MusicBox
 from musicbox.cards import CardStore
+from musicbox.reader import READ_ERROR
 
 
 class FakeReader:
@@ -22,6 +23,12 @@ class FakePlayer:
     def stop(self):
         self.events.append(("stop",))
 
+    def cue(self):
+        self.events.append(("cue",))
+
+    def check(self):
+        pass
+
 
 def make_box(tmp_path, reads, misses_to_remove=3):
     music = tmp_path / "music"
@@ -32,6 +39,8 @@ def make_box(tmp_path, reads, misses_to_remove=3):
     cards.assign("aa", music / "a.mp3")
     cards.assign("bb", music / "b.mp3")
     player = FakePlayer()
+    # The reader starts empty, as when the box boots with no card on it.
+    reads = [None, *reads]
     box = MusicBox(FakeReader(reads), player, cards, misses_to_remove)
     for _ in reads:
         box.tick()
@@ -61,7 +70,7 @@ def test_swapping_cards_switches_track(tmp_path):
 
 def test_unknown_card_stops_playback(tmp_path):
     _, player, _ = make_box(tmp_path, ["aa", "zz"])
-    assert player.events == [("play", "a.mp3"), ("stop",)]
+    assert player.events == [("play", "a.mp3"), ("cue",)]
 
 
 def test_missing_file_does_not_play(tmp_path):
@@ -72,5 +81,34 @@ def test_missing_file_does_not_play(tmp_path):
     cards.assign("aa", music / "a.mp3")
     (music / "a.mp3").unlink()
     player = FakePlayer()
-    MusicBox(FakeReader(["aa"]), player, cards).tick()
+    box = MusicBox(FakeReader([None, "aa"]), player, cards)
+    box.tick()
+    box.tick()
     assert ("play", "a.mp3") not in player.events
+
+
+def test_card_already_on_reader_at_start_stays_silent(tmp_path):
+    music = tmp_path / "music"
+    music.mkdir()
+    (music / "a.mp3").write_bytes(b"")
+    cards = CardStore(tmp_path / "cards.json", music)
+    cards.assign("aa", music / "a.mp3")
+    player = FakePlayer()
+    reads = [READ_ERROR, "aa", "aa", None, None, None, "aa"]
+    box = MusicBox(FakeReader(reads), player, cards)
+    for _ in reads:
+        box.tick()
+    # Silent at start; lifting it is silent too; only the real tap plays.
+    assert [e for e in player.events if e[0] != "stop"] == [("play", "a.mp3")]
+
+
+def test_reader_errors_are_not_lifts_or_taps(tmp_path):
+    reads = ["aa", READ_ERROR, READ_ERROR, READ_ERROR, READ_ERROR, "aa"]
+    box, player, _ = make_box(tmp_path, reads)
+    assert player.events == [("play", "a.mp3")]
+    assert box.current_uid == "aa"
+
+
+def test_lifting_a_card_only_stops(tmp_path):
+    _, player, _ = make_box(tmp_path, ["aa", None, None, None, None, None])
+    assert player.events == [("play", "a.mp3"), ("stop",)]

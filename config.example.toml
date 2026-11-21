@@ -14,9 +14,30 @@ volume = 100
 # Run `mpv --audio-device=help` to list them. Empty = system default.
 audio_device = ""
 
+# The sound card's own hardware volume, 0-100. When set (not -1), it is set
+# and read back before every sound and re-checked while playing; if it can't
+# be confirmed at or below this value, nothing plays. Needs an audio_device
+# with CARD=... in it. mpv's `volume` above is steep below 50 or so, so use
+# this for the overall loudness.
+mixer_volume = -1
+
+# A chime plays when a card is tapped, then the card's song. chime_file is
+# required: without a chime nothing plays. chime_volume (0-100) scales the
+# chime file's own loudness. Any format ffmpeg reads works.
+chime_file = ""
+chime_volume = 25
+
+# Stop each song after this many seconds. 0 plays the whole song.
+play_seconds = 0
+
 # How many failed reads in a row count as "card removed". Raise this if
 # playback cuts out while the card is still lying on the reader.
 misses_to_remove = 3
+
+# Leave empty if the PN532 is wired to the Pi's I2C pins. If it is plugged in
+# through a USB serial adapter, set its path; the /dev/serial/by-id/ name stays
+# the same across reboots and replugs, unlike /dev/ttyUSB0.
+serial_port = ""
 
 # Seconds to wait for a card on each read.
 read_timeout = 0.2

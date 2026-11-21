@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import logging
 
+from .reader import READ_ERROR
+
 log = logging.getLogger(__name__)
 
 
@@ -17,10 +19,27 @@ class MusicBox:
         self.misses_to_remove = misses_to_remove
         self.current_uid: str | None = None
         self._misses = 0
+        self._started = False
 
     def tick(self) -> None:
         """Poll the reader once and react."""
+        self.player.check()
         uid = self.reader.read()
+
+        if uid == READ_ERROR:
+            # The reader failed; that is not a card being lifted or placed.
+            # Keep the current state, so a card lying on the reader through a
+            # glitch doesn't replay its song when reading recovers.
+            return
+
+        if not self._started:
+            # Only a tap plays. A card already on the reader when the box
+            # starts (or restarts after a crash) is noted but stays silent.
+            self._started = True
+            if uid is not None:
+                log.info("card %s already on the reader at start; lift and replace it to play", uid)
+                self.current_uid = uid
+                return
 
         if uid is None:
             # A card lying on the reader occasionally fails a read, so only
@@ -42,15 +61,15 @@ class MusicBox:
         if track is None:
             log.warning("unknown card %s (assign it with: musicbox assign <file>)", uid)
             self._record(uid, None, "unknown")
-            self.player.stop()
+            self.player.cue()
         elif not track.is_file():
             log.error("card %s -> %s, but that file is missing (drive not mounted?)", uid, track)
             self._record(uid, track, "missing")
-            self.player.stop()
+            self.player.cue()
         else:
             log.info("card %s placed", uid)
-            self._record(uid, track, "played")
-            self.player.play(track)
+            played = self.player.play(track)
+            self._record(uid, track, "played" if played is not False else "blocked")
 
     def _record(self, uid: str, track, result: str) -> None:
         if self.taplog is None:

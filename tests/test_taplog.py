@@ -32,7 +32,7 @@ def test_box_records_each_placement(tmp_path):
     cards.assign("gg", music / "gone.mp3")
     (music / "gone.mp3").unlink()
     taps = TapLog(tmp_path / "taps.db")
-    reads = ["aa", "aa", "aa", None, None, None, "zz", "gg"]
+    reads = [None, "aa", "aa", "aa", None, None, None, "zz", "gg"]
     box = MusicBox(FakeReader(reads), FakePlayer(), cards, taplog=taps)
     for _ in reads:
         box.tick()
@@ -55,5 +55,7 @@ def test_logging_failure_does_not_stop_playback(tmp_path):
     cards = CardStore(tmp_path / "cards.json", music)
     cards.assign("aa", music / "a.mp3")
     player = FakePlayer()
-    MusicBox(FakeReader(["aa"]), player, cards, taplog=BrokenLog()).tick()
+    box = MusicBox(FakeReader([None, "aa"]), player, cards, taplog=BrokenLog())
+    box.tick()
+    box.tick()
     assert player.events == [("play", "a.mp3")]

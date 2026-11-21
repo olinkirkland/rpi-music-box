@@ -12,7 +12,7 @@ dependencies = []
 [project.optional-dependencies]
 # Hardware driver; only installable/usable on the Pi itself. Blinka needs
 # gpiod on a Raspberry Pi but does not declare it.
-pi = ["adafruit-circuitpython-pn532>=2.4", "gpiod>=2.2.2,<3"]
+pi = ["adafruit-circuitpython-pn532>=2.4", "gpiod>=2.2.2,<3", "pyserial>=3.5"]
 dev = ["pytest"]
 
 [project.scripts]

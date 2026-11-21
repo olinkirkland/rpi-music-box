@@ -152,14 +152,30 @@ The card mapping lives in `~/.config/musicbox/cards.json`, a plain
 
 ## Behaviour
 
-- Card placed: its track plays from the start.
-- Card removed: playback stops.
+- Card placed: the chime plays, then the card's track from the start (for
+  `play_seconds` if set, otherwise the whole track).
+- Card removed: playback stops. Lifting a card never makes a sound.
 - Track ends with the card still on the reader: silence. Lift and replace the
   card to hear it again.
 - A different card placed: switches to that card's track.
-- Unknown card: nothing plays, and its UID is logged.
+- Unknown card: only the chime plays, and its UID is logged.
 - The service restarts itself if it crashes and reconnects if the reader
   glitches.
+
+### Sound safety
+
+Sound only ever plays because a card was tapped:
+
+- Nothing plays at start-up, even if a card is already on the reader (lift
+  and replace it to play), and a reader glitch is never taken as a tap.
+- A track only plays after the chime. Without a usable `chime_file`, nothing
+  plays at all. There is no built-in sound.
+- With `mixer_volume` set, the sound card's hardware volume is set and read
+  back before every sound. If it can't be confirmed at or below that value,
+  nothing plays. It is re-checked every half second during playback, and
+  playback is killed if it goes above.
+- With `play_seconds` set, mpv stops the track after that long, and the box
+  kills mpv if it ever runs past its time.
 
 ## Troubleshooting
 

@@ -16,11 +16,16 @@ class Config:
     cards_file: Path = Path("~/.config/musicbox/cards.json")
     volume: int = 100
     audio_device: str = ""
+    mixer_volume: int = -1
     misses_to_remove: int = 3
     read_timeout: float = 0.2
+    serial_port: str = ""
     taps_file: Path = Path("~/.local/share/musicbox/taps.db")
     web_enabled: bool = True
     web_port: int = 8080
+    chime_volume: int = 25
+    chime_file: str = ""
+    play_seconds: float = 0
 
     def __post_init__(self) -> None:
         self.music_dir = Path(self.music_dir).expanduser()

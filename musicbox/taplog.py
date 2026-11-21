@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS taps (
     time   REAL NOT NULL,   -- unix timestamp
     uid    TEXT NOT NULL,
     track  TEXT,            -- path relative to music_dir, NULL if unassigned
-    result TEXT NOT NULL    -- 'played', 'unknown' or 'missing'
+    result TEXT NOT NULL    -- 'played', 'blocked', 'unknown' or 'missing'
 )
 """
 

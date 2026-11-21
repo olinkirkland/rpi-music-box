@@ -4,16 +4,27 @@ from __future__ import annotations
 
 import argparse
 import logging
+import re
 import signal
 import sys
+import wave
+from pathlib import Path
 
 from .box import MusicBox
+from .chime import duration as chime_duration
+from .chime import prepare_chime
 from .cards import CardStore
 from .config import load_config
-from .player import Player
+from .player import Mixer, Player
 from .reader import Reader
 from .taplog import TapLog
 from .web import start_web
+
+
+def _card_name(audio_device: str) -> str:
+    """ALSA card name from an mpv device like alsa/plughw:CARD=Foo,DEV=0."""
+    m = re.search(r"CARD=([^,]+)", audio_device)
+    return m.group(1) if m else ""
 
 
 def cmd_run(args, config, cards) -> int:
@@ -23,13 +34,29 @@ def cmd_run(args, config, cards) -> int:
     taplog = TapLog(config.taps_file)
     if config.web_enabled:
         try:
-            start_web(taplog, port=config.web_port)
+            start_web(taplog, cards, port=config.web_port)
         except OSError as e:
             # Never let the web page keep the music from working.
             logging.error("web page disabled: cannot listen on port %d (%s)", config.web_port, e)
+    chime, chime_seconds = None, 0.0
+    if config.chime_file:
+        try:
+            chime = prepare_chime(Path("~/.cache/musicbox").expanduser(), config.chime_volume,
+                                  Path(config.chime_file).expanduser())
+            chime_seconds = chime_duration(chime)
+        except (OSError, EOFError, wave.Error) as e:
+            chime = None
+            logging.error("chime unusable, so nothing will play: %s", e)
+    else:
+        logging.error("no chime_file set, so nothing will play (a song only plays after the chime)")
+    mixer = None
+    if config.mixer_volume >= 0:
+        mixer = Mixer(_card_name(config.audio_device), config.mixer_volume)
     box = MusicBox(
-        reader=Reader(timeout=config.read_timeout),
-        player=Player(volume=config.volume, audio_device=config.audio_device),
+        reader=Reader(timeout=config.read_timeout, serial_port=config.serial_port),
+        player=Player(volume=config.volume, audio_device=config.audio_device,
+                      chime=chime, chime_seconds=chime_seconds,
+                      play_seconds=config.play_seconds, mixer=mixer),
         cards=cards,
         misses_to_remove=config.misses_to_remove,
         taplog=taplog,
@@ -42,7 +69,7 @@ def cmd_run(args, config, cards) -> int:
 def cmd_assign(args, config, cards) -> int:
     # Validate every path before asking for any taps.
     tracks = [cards.relative(t) for t in args.tracks]
-    reader = Reader(timeout=config.read_timeout)
+    reader = Reader(timeout=config.read_timeout, serial_port=config.serial_port)
     for track in tracks:
         print(f"Tap a card for: {track}")
         uid = reader.wait_for_card()
@@ -57,7 +84,7 @@ def cmd_assign(args, config, cards) -> int:
 
 
 def cmd_scan(args, config, cards) -> int:
-    reader = Reader(timeout=config.read_timeout)
+    reader = Reader(timeout=config.read_timeout, serial_port=config.serial_port)
     print("Tap cards to see their UIDs. Ctrl-C to quit.")
     while True:
         uid = reader.wait_for_card()
