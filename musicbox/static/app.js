@@ -616,6 +616,12 @@ const app = createApp({
       this.fm.renaming = item.path;
       this.fm.renameTo = isFile ? item.name.slice(0, dot) : item.name;
       this.fm.renameExt = isFile ? item.name.slice(dot) : "";
+      // Ready to type: focus the name and select it (only one rename is open at a time).
+      this.$nextTick(() => {
+        const input = this.$refs.filesDialog?.querySelector(".fm-row .fm-inline input");
+        input?.focus();
+        input?.select();
+      });
     },
     doRename(item) {
       const name = this.fm.renameTo.trim() + this.fm.renameExt;

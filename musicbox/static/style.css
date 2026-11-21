@@ -617,8 +617,13 @@ dialog.modal.wide > article { width: min(64rem, calc(100vw - 2rem)); }
 .fm-tools .spacer { flex: 1; }
 .fm-inline { display: flex; gap: 0.4rem; margin: 0; align-items: center; }
 .fm-inline.grow { flex: 1; }
-.fm-inline input { margin: 0; height: 2.2rem; padding-top: 0; padding-bottom: 0; }
-.fm-inline button { margin: 0; width: auto; padding: 0.3rem 0.8rem; font-size: 0.85rem; }
+/* One height for the name field and its Rename / Cancel buttons. */
+.fm-inline { --fm-row-h: 2.2rem; }
+.fm-inline input { margin: 0; height: var(--fm-row-h); padding-top: 0; padding-bottom: 0; }
+.fm-inline button {
+  margin: 0; width: auto; height: var(--fm-row-h); padding: 0 0.85rem; line-height: 1;
+  font-size: 0.85rem; display: inline-flex; align-items: center; flex: none;
+}
 .fm-drop-hint { margin: 0.35rem 0 0.6rem; }
 .fm-uploads { list-style: none; margin: 0 0 0.6rem; padding: 0.4rem 0.6rem; border-radius: 8px; background: var(--pico-card-sectioning-background-color); max-height: 9rem; overflow-y: auto; }
 .fm-uploads li { display: grid; grid-template-columns: minmax(0, 1fr) 8rem 6rem; align-items: center; gap: 0.6rem; margin: 0.15rem 0; list-style: none; font-size: 0.8rem; }
@@ -687,7 +692,9 @@ button.with-icon svg { flex: none; width: 1.05rem; height: 1.05rem; }
   border: 1px solid var(--pico-form-element-border-color); border-radius: var(--pico-border-radius);
   background: var(--pico-form-element-background-color);
 }
-.fm-rename input { flex: 1; min-width: 0; border: none !important; box-shadow: none !important; background: transparent !important; }
+/* The box carries the border, so it is the one that is var(--fm-row-h) tall. */
+.fm-rename { height: var(--fm-row-h); box-sizing: border-box; }
+.fm-rename input { flex: 1; min-width: 0; height: 100%; border: none !important; box-shadow: none !important; background: transparent !important; }
 .fm-rename:focus-within { border-color: var(--mb-accent); box-shadow: 0 0 0 2px var(--pico-primary-focus); }
 .fm-ext { flex: none; padding: 0 0.65rem 0 0.1rem; font-size: 0.88rem; color: var(--pico-muted-color); user-select: none; }
 
