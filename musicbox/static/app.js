@@ -273,7 +273,7 @@ const app = createApp({
       newFolder: { open: false, name: "", busy: false, error: "" },
       allTaps: { open: false, query: "", page: 1, pages: 1, total: 0, rows: [], busy: false, error: "" },
       controlBusy: false,
-      edit: { open: false, orig: null, uid: "", name: "", tracks: [], shuffle: false, repeat: false,
+      edit: { open: false, orig: null, uid: "", name: "", nameBase: "", tracks: [], shuffle: false, repeat: false,
               art_version: null, busy: false, error: "" },
       artBusy: false,
       artError: "",
@@ -349,10 +349,20 @@ const app = createApp({
       // The tag name for whatever is picked now (it may differ from the card's).
       return this.edit.tracks.length ? this.selectionName(this.edit.tracks) : this.edit.orig?.tag_name || "";
     },
+    editNameTouched() {
+      // Typed in: differs from what the field opened with (or was set to by the box).
+      return this.editName !== this.edit.nameBase;
+    },
     editNameDropped() {
-      // Picking a different track drops an unchanged custom name (see saveEdit).
+      // Picking different tracks drops a custom name you didn't retype (see saveEdit).
       const o = this.edit.orig;
-      return !!o && !!o.custom_name && !sameList(this.edit.tracks, o.tracks) && this.editName === o.custom_name;
+      return !!o && !!o.custom_name && !sameList(this.edit.tracks, o.tracks) && !this.editNameTouched;
+    },
+    editNameToSave() {
+      // The custom name to store; "" means "use the name from the tags".
+      const o = this.edit.orig;
+      if (!this.editNameTouched) return sameList(this.edit.tracks, o.tracks) ? o.custom_name || "" : "";
+      return this.editName === this.editTagName ? "" : this.editName;
     },
     editArtDropped() {
       const o = this.edit.orig;
@@ -370,7 +380,7 @@ const app = createApp({
       const o = this.edit.orig;
       return !!o && (this.edit.uid.toLowerCase() !== o.uid || !sameList(this.edit.tracks, o.tracks)
         || this.edit.shuffle !== o.shuffle || this.edit.repeat !== o.repeat
-        || this.editName !== (o.custom_name || ""));
+        || this.editNameToSave !== (o.custom_name || ""));
     },
 
     // Assign modal
@@ -731,12 +741,19 @@ const app = createApp({
 
     // --- Edit card ---------------------------------------------------------
     openEdit(card) {
-      this.edit = { open: true, orig: { ...card }, uid: card.uid, name: card.custom_name || "",
+      // The name field opens with the name the card shows, selected, ready to type over.
+      const shown = card.custom_name || card.tag_name || "";
+      this.edit = { open: true, orig: { ...card }, uid: card.uid, name: shown, nameBase: shown,
                     tracks: [...card.tracks], shuffle: card.shuffle, repeat: card.repeat,
                     art_version: card.art_version, busy: false, error: "" };
       this.artError = "";
       this.artSearch = { open: false, q: card.name, artist: card.artist || "", busy: false, searched: false, results: [] };
-      this.$nextTick(() => this.$refs.editDialog.showModal());
+      this.$nextTick(() => {
+        this.$refs.editDialog.showModal();
+        const input = this.$refs.editNameInput;
+        input?.focus();
+        input?.select();
+      });
     },
     closeEdit() {
       if (this.edit.busy) return;
@@ -752,10 +769,9 @@ const app = createApp({
         if (uid !== o.uid) {
           await api("POST", "/api/cards/" + encodeURIComponent(o.uid) + "/rename", { uid });
         }
-        if (!sameList(this.edit.tracks, o.tracks) || this.editName !== (o.custom_name || "")
+        if (!sameList(this.edit.tracks, o.tracks) || this.editNameToSave !== (o.custom_name || "")
             || this.edit.shuffle !== o.shuffle || this.edit.repeat !== o.repeat) {
-          // An unchanged custom name doesn't carry over to different tracks.
-          const name = this.editNameDropped ? "" : this.editName;
+          const name = this.editNameToSave;
           await api("PUT", "/api/cards/" + encodeURIComponent(uid), {
             tracks: this.edit.tracks, name, shuffle: this.edit.shuffle && this.edit.tracks.length > 1,
             repeat: this.edit.repeat,
@@ -1000,6 +1016,17 @@ const app = createApp({
       source.addEventListener("cards", () => this.loadCards());
       source.addEventListener("volume", (e) => (this.volume = JSON.parse(e.data)));
       source.addEventListener("assign_tap", (e) => this.onAssignTap(JSON.parse(e.data)));
+    },
+  },
+
+  watch: {
+    "edit.tracks"() {
+      if (this.edit.open && !this.editNameTouched) {
+        const next = sameList(this.edit.tracks, this.edit.orig.tracks)
+          ? this.edit.orig.custom_name || this.edit.orig.tag_name || ""
+          : this.editTagName;
+        this.edit.name = this.edit.nameBase = next;
+      }
     },
   },
 

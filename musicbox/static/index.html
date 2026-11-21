@@ -441,9 +441,12 @@
       </label>
       <label>
         Name
-        <input v-model="edit.name" class="name-input" maxlength="80" autocomplete="off"
+        <input ref="editNameInput" v-model="edit.name" class="name-input" maxlength="80" autocomplete="off"
                :placeholder="editTagName || 'Name from the tags'">
-        <small class="field-hint">Shown on this card and in Now Playing. Leave empty to use the name from the tags. Files are never changed.</small>
+        <small v-if="editNameToSave && editTagName" class="original-name" :title="editTagName">
+          <strong>Original:</strong> {{ editTagName }}
+        </small>
+        <small class="field-hint">Shown on this card and in Now Playing. Clear it to use the name from the tags. Files are never changed.</small>
       </label>
       <p class="modal-label">Plays</p>
       <track-picker :items="libraryItems" v-model="edit.tracks"></track-picker>

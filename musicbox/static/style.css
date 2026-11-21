@@ -690,3 +690,11 @@ button.with-icon svg { flex: none; width: 1.05rem; height: 1.05rem; }
 .fm-rename input { flex: 1; min-width: 0; border: none !important; box-shadow: none !important; background: transparent !important; }
 .fm-rename:focus-within { border-color: var(--mb-accent); box-shadow: 0 0 0 2px var(--pico-primary-focus); }
 .fm-ext { flex: none; padding: 0 0.65rem 0 0.1rem; font-size: 0.88rem; color: var(--pico-muted-color); user-select: none; }
+
+/* Under a custom card name: the name from the tags, faintly. */
+.original-name {
+  display: block; margin: -0.35rem 0 0.25rem; font-size: 0.75rem; font-weight: 400;
+  color: var(--pico-muted-color); opacity: 0.85;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.original-name strong { font-weight: 600; }
